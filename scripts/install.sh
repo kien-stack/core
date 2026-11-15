@@ -82,18 +82,18 @@ else
   # 2. argocd/: ArgoCD follows your fork
   R="$KSTACK_REPO" B="$KSTACK_BRANCH" yq -i '.spec.source.repoURL = strenv(R) | .spec.source.targetRevision = strenv(B)' argocd/app-of-apps.yaml
   for f in argocd/applications/*/appset.yaml; do
-    R="$KSTACK_REPO" B="$KSTACK_BRANCH" yq -i '.spec.generators[0].git.repoURL = strenv(R) | .spec.generators[0].git.revision = strenv(B) |
+    R="$KSTACK_REPO" B="$KSTACK_BRANCH" yq -i '(.spec.generators[0] | select(has("git")) | .git) |= (.repoURL = strenv(R) | .revision = strenv(B)) |
       .spec.template.spec.source.repoURL = strenv(R) | .spec.template.spec.source.targetRevision = strenv(B)' "$f"
   done
-  # 3. optional bricks: an "exclude" entry in the platform ApplicationSet
+  # 3. bricks: entries of the list in the platform ApplicationSet
   if [ "$KSTACK_CILIUM" = true ]; then
-    yq -i 'del(.spec.generators[0].git.directories[] | select(.path == "helm/platform/cilium"))' argocd/applications/platform/appset.yaml
+    yq -i '.spec.generators[0].list.elements += [{"app": "cilium", "namespace": "kube-system"}]' argocd/applications/platform/appset.yaml
     IP="$KSTACK_IP" yq -i '.cilium.k8sServiceHost = strenv(IP) | .cilium.k8sServicePort = 6443 |
       .cilium.ipam = {"mode": "cluster-pool", "operator": {"clusterPoolIPv4PodCIDRList": ["10.42.0.0/16"]}}' cluster.yaml
   fi
   # k3s & co already run a metrics-server: do not deploy ours
   if [ -n "$(kubectl -n kube-system get deploy metrics-server -o jsonpath='{.spec.selector.matchLabels.k8s-app}' 2>/dev/null)" ]; then
-    yq -i '.spec.generators[0].git.directories += [{"path": "helm/platform/metrics-server", "exclude": true}]' argocd/applications/platform/appset.yaml
+    yq -i 'del(.spec.generators[0].list.elements[] | select(.app == "metrics-server"))' argocd/applications/platform/appset.yaml
   fi
   [ "$tls" = selfsigned ] || log "Let's Encrypt HTTP-01: *.$dom must point to $KSTACK_IP, port 80 open from the Internet"
 

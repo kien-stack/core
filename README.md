@@ -55,7 +55,7 @@ argocd/
   app-of-apps.yaml              the only thing install.sh applies: watches argocd/applications
   applications/
     kustomization.yaml          resources: [platform, apps]
-    platform/                   AppProject + ApplicationSet: one Application per helm/platform/* folder
+    platform/                   AppProject + ApplicationSet: one Application per brick listed in appset.yaml
     apps/                       AppProject + ApplicationSet: one Application per helm/apps/* folder
 helm/
   platform/<brick>/             Helm chart: Chart.yaml (upstream chart as dependency), values.yaml, templates/
@@ -64,9 +64,9 @@ cluster.yaml                    YOUR settings, passed to every chart (global.dom
 install.sh                      one-time bootstrap: secrets, ArgoCD (Helm), kubectl apply argocd/app-of-apps.yaml
 ```
 
-Plain ArgoCD YAML, no templating on the ArgoCD side. Exceptions (namespace, sync options) live in the
-`templatePatch` of each ApplicationSet. Optional bricks (`cilium`, `external-dns`) are excluded in
-`applications/platform/appset.yaml`: remove the `exclude` line to enable them.
+Plain ArgoCD YAML, no templating on the ArgoCD side. `applications/platform/appset.yaml` lists the
+bricks to deploy, each with its namespace: comment out an entry to disable a brick, uncomment one
+(`cilium`, `external-dns`) to enable it, change `namespace` to move it.
 
 No hidden configuration: what is in Git is what runs.
 
