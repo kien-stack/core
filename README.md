@@ -34,10 +34,6 @@ Requirements: a Kubernetes cluster (2 vCPU, 8 GB RAM), `kubectl`, `helm`, `git`.
 
 Full docs: https://shop.kien.cc/docs
 
-## Paid packs
-
-**Private AI** and **All-In-One** build on Essential: https://shop.kien.cc
-
 ## License
 
 Apache-2.0. Open source components keep their own licenses.
