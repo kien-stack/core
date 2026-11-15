@@ -54,18 +54,19 @@ log "demo on context $(kubectl config current-context), https://*.$dom, release 
 # So, and ONLY in this demo, the root Application pins $REF and overrides global.domain.
 # A real install has none of this: https://raw.githubusercontent.com/kien-stack/essential/main/scripts/install.sh writes your settings into your fork.
 D="$dom" yq -i '.global.domain = strenv(D)' cluster.yaml
-ms=false
-[ -z "$(kubectl -n kube-system get deploy metrics-server -o jsonpath='{.spec.selector.matchLabels.k8s-app}' 2>/dev/null)" ] || ms=true
-if [ "$ms" = true ]; then
-  yq -i '.spec.generators[0].git.directories += [{"path": "helm/platform/metrics-server", "exclude": true}]' argocd/applications/platform/appset.yaml
+# k3s & co already run a metrics-server: do not deploy ours
+if [ -n "$(kubectl -n kube-system get deploy metrics-server -o jsonpath='{.spec.selector.matchLabels.k8s-app}' 2>/dev/null)" ]; then
+  yq -i 'del(.spec.generators[0].list.elements[] | select(.app == "metrics-server"))' argocd/applications/platform/appset.yaml
 fi
-D="$dom" V="$REF" MS="$ms" yq -i '.spec.source.targetRevision = strenv(V) |
-  .spec.source.kustomize.patches = [{"target": {"kind": "ApplicationSet"}, "patch": ([
-    {"op": "replace", "path": "/spec/generators/0/git/revision", "value": strenv(V)},
-    {"op": "replace", "path": "/spec/template/spec/source/targetRevision", "value": strenv(V)},
-    {"op": "add", "path": "/spec/template/spec/source/helm/valuesObject", "value": {"global": {"domain": strenv(D)}}}] | to_json)}] |
-  (select(strenv(MS) == "true") | .spec.source.kustomize.patches += [{"target": {"kind": "ApplicationSet", "name": "platform"},
-    "patch": ([{"op": "add", "path": "/spec/generators/0/git/directories/-", "value": {"path": "helm/platform/metrics-server", "exclude": true}}] | to_json)}]) // .' argocd/app-of-apps.yaml
+D="$dom" V="$REF" EL="$(yq -o=json -I=0 '.spec.generators[0].list.elements' argocd/applications/platform/appset.yaml)" yq -i '.spec.source.targetRevision = strenv(V) |
+  .spec.source.kustomize.patches = [
+    {"target": {"kind": "ApplicationSet"}, "patch": ([
+      {"op": "replace", "path": "/spec/template/spec/source/targetRevision", "value": strenv(V)},
+      {"op": "add", "path": "/spec/template/spec/source/helm/valuesObject", "value": {"global": {"domain": strenv(D)}}}] | to_json)},
+    {"target": {"kind": "ApplicationSet", "name": "apps"}, "patch": ([
+      {"op": "replace", "path": "/spec/generators/0/git/revision", "value": strenv(V)}] | to_json)},
+    {"target": {"kind": "ApplicationSet", "name": "platform"}, "patch": ([
+      {"op": "replace", "path": "/spec/generators/0/list/elements", "value": (strenv(EL) | from_json)}] | to_json)}]' argocd/app-of-apps.yaml
 
 bash install.sh install
 cat <<TXT
