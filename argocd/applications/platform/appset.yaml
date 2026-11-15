@@ -1,4 +1,4 @@
-# One Application per folder in helm/platform/ (the base platform). Exceptions in templatePatch.
+# The base platform: one Application per entry of the list below (brick + namespace).
 # repoURL/revision: your fork (same as argocd/app-of-apps.yaml). Values: values.yaml + /cluster.yaml.
 apiVersion: argoproj.io/v1alpha1
 kind: ApplicationSet
@@ -10,28 +10,38 @@ spec:
   goTemplateOptions:
     - missingkey=error
   generators:
-    - git:
-        repoURL: https://github.com/kien-stack/essential.git
-        revision: main
-        directories:
-          - path: "helm/platform/*"
-          # Optional bricks: remove the entry to enable
-          - path: helm/platform/cilium
-            exclude: true
-          - path: helm/platform/external-dns
-            exclude: true
-  # Per-app exceptions (target namespace)
-  templatePatch: |
-    {{- if eq .path.basename "cloudnative-pg" }}
-    spec:
-      destination: {namespace: cnpg-system}
-    {{- else if has .path.basename (list "metrics-server" "cilium") }}
-    spec:
-      destination: {namespace: kube-system}
-    {{- end }}
+    - list:
+        # One entry = one brick (helm/platform/<app>) deployed in <namespace>.
+        # Disable a brick: comment out its entry and push (ArgoCD removes it).
+        elements:
+          # Required: the other bricks and your apps depend on them
+          - app: argocd
+            namespace: argocd
+          - app: traefik
+            namespace: traefik
+          - app: cert-manager
+            namespace: cert-manager
+          - app: external-secrets
+            namespace: external-secrets
+          # Optional
+          - app: openebs
+            namespace: openebs
+          - app: cloudnative-pg
+            namespace: cnpg-system
+          - app: infisical
+            namespace: infisical
+          - app: reloader
+            namespace: reloader
+          - app: metrics-server
+            namespace: kube-system
+          # Off by default: uncomment to enable
+          # - app: cilium
+          #   namespace: kube-system
+          # - app: external-dns
+          #   namespace: external-dns
   template:
     metadata:
-      name: "{{ .path.basename }}"
+      name: "{{ .app }}"
       finalizers:
         - resources-finalizer.argocd.argoproj.io
     spec:
@@ -39,16 +49,16 @@ spec:
       source:
         repoURL: https://github.com/kien-stack/essential.git
         targetRevision: main
-        path: "{{ .path.path }}"
+        path: "helm/platform/{{ .app }}"
         helm:
-          releaseName: "{{ .path.basename }}"
+          releaseName: "{{ .app }}"
           # Your settings: see /cluster.yaml
           valueFiles:
             - values.yaml
             - ../../../cluster.yaml
       destination:
         server: https://kubernetes.default.svc
-        namespace: "{{ .path.basename }}"
+        namespace: "{{ .namespace }}"
       syncPolicy:
         automated:
           prune: true

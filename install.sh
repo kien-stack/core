@@ -5,7 +5,7 @@
 # Everything it uses is in Git, nothing is generated:
 #   cluster.yaml             your settings (domain, TLS...), passed to every chart
 #   argocd/app-of-apps.yaml  the repo/branch ArgoCD follows (same URL in argocd/applications/*/appset.yaml)
-#   argocd/applications/platform/appset.yaml   optional bricks: remove an "exclude" entry to enable it
+#   argocd/applications/platform/appset.yaml   bricks + namespace: comment out an entry to disable it
 # After that, ArgoCD applies whatever you push. https://raw.githubusercontent.com/kien-stack/essential/main/scripts/install.sh does the edits for you.
 # Optional environment variables (secrets, never stored in Git):
 #   GIT_USERNAME / GIT_TOKEN          private GitOps repo (HTTPS)
@@ -49,12 +49,10 @@ run_timeout() { local t=$1; shift; if command -v timeout >/dev/null; then timeou
 b64() { base64 | tr -d '\n'; }
 randpw() { LC_ALL=C tr -dc 'A-Za-z0-9' </dev/urandom 2>/dev/null | head -c "${1:-24}" || true; }
 
-# Bricks ArgoCD will deploy: every helm/platform/* folder not excluded in the platform ApplicationSet, + helm/apps/*.
+# Bricks ArgoCD will deploy: the entries of the platform ApplicationSet list, + helm/apps/*.
 enabled_components() {
-  local d n ex; ex=$(yq -r '.spec.generators[0].git.directories[] | select(.exclude == true) | .path' "$APPSET")
-  for d in "$ROOT"/helm/platform/*/; do
-    n=$(basename "$d"); grep -qx "helm/platform/$n" <<<"$ex" || echo "$n"
-  done
+  local d
+  yq -r '.spec.generators[0].list.elements[].app' "$APPSET"
   for d in "$ROOT"/helm/apps/*/; do [ -d "$d" ] && basename "$d"; done
   return 0
 }
@@ -93,11 +91,11 @@ doctor() {
     mem=$(kubectl get nodes -o jsonpath='{range .items[*]}{.status.allocatable.memory}{"\n"}{end}' | awk '{ v=$1; if (v ~ /Ki$/) s+=v/1048576; else if (v ~ /Mi$/) s+=v/1024; else if (v ~ /Gi$/) s+=v; else s+=v/1073741824 } END {print int(s)}')
     if [ "$mem" -ge 3 ]; then ok "allocatable memory: ${mem} Gi"; else warn "allocatable memory ${mem} Gi: >= 6 GB recommended"; fi
     if grep -qx metrics-server <<<"$comps" && foreign_metrics_server; then
-      ko "this cluster already runs a metrics-server: exclude helm/platform/metrics-server in $APPSET"; fail=1
+      ko "this cluster already runs a metrics-server: remove the metrics-server entry in $APPSET"; fail=1
     fi
     if grep -qx cilium <<<"$comps" && ! kubectl -n kube-system get ds cilium >/dev/null 2>&1; then
       local cni; cni=$(kubectl get pods -A -o jsonpath='{range .items[*]}{.metadata.name}{"\n"}{end}' 2>/dev/null | grep -Eo '^(kindnet|flannel|kube-flannel|calico|canal|weave|kube-router|aws-node|antrea)' | head -1 || true)
-      if [ -n "$cni" ]; then ko "cilium is enabled but this cluster already has a CNI ($cni): exclude helm/platform/cilium again"; fail=1
+      if [ -n "$cni" ]; then ko "cilium is enabled but this cluster already has a CNI ($cni): remove the cilium entry in $APPSET again"; fail=1
       else ok "no CNI found: Cilium will be installed"; fi
     fi
   fi
