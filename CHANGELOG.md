@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.3.7](https://github.com/kien-stack/essential/compare/v0.3.6...v0.3.7) (2026-11-15)
+
+
+### Features
+
+* **examples:** app-template examples per workload type ([#42](https://github.com/kien-stack/essential/issues/42)) ([6d6b638](https://github.com/kien-stack/essential/commit/6d6b6385c70d4c155bba9c2a56ebf220cffbd06a))
+
+
+### Documentation
+
+* shorter, simpler README ([#45](https://github.com/kien-stack/essential/issues/45)) ([64563d5](https://github.com/kien-stack/essential/commit/64563d5a8076473e30b868c4626787c1043c575a))
+
 ## [0.3.6](https://github.com/kien-stack/essential/compare/v0.3.5...v0.3.6) (2026-11-12)
 
 
