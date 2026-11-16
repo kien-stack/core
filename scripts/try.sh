@@ -43,12 +43,15 @@ if [ "${1:-}" = uninstall ]; then
   kubectl -n argocd scale deploy argocd-applicationset-controller --replicas=0 >/dev/null 2>&1 || true
   kubectl -n argocd wait --for=delete pod -l app.kubernetes.io/name=argocd-applicationset-controller --timeout=60s >/dev/null 2>&1 || true
   # 2. ArgoCD manages itself: drop app-of-apps and the argocd app WITHOUT pruning, ArgoCD stays up
-  for a in app-of-apps argocd; do unfin "$a"; kubectl -n argocd delete application "$a" --ignore-not-found >/dev/null 2>&1 || true; done
+  for a in app-of-apps argocd; do
+    unfin "$a"; kubectl -n argocd delete application "$a" --ignore-not-found --wait=true --timeout=60s >/dev/null 2>&1 || true
+  done
   # 3. Every other app: ArgoCD deletes what it deployed (finalizer), we wait for it
-  for a in $(kubectl -n argocd get applications -o name 2>/dev/null); do
+  apps=$(kubectl -n argocd get applications -o name 2>/dev/null | grep -vx -e application.argoproj.io/argocd -e application.argoproj.io/app-of-apps || true)
+  for a in $apps; do
     kubectl -n argocd patch "$a" --type merge -p '{"metadata":{"finalizers":["resources-finalizer.argocd.argoproj.io"]}}' >/dev/null 2>&1 || true
   done
-  kubectl -n argocd delete applications --all --wait=true --timeout=5m || {
+  [ -z "$apps" ] || kubectl -n argocd delete $apps --wait=true --timeout=5m || {
     log "some apps did not finish pruning: forcing"
     for a in $(kubectl -n argocd get applications -o name 2>/dev/null); do unfin "${a#*/}"; done; }
   kubectl -n argocd delete applicationsets --all >/dev/null 2>&1 || true
