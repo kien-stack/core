@@ -49,6 +49,13 @@ setup() {
   local i
   for i in $(seq 60); do kubectl get nodes >/dev/null 2>&1 && break; sleep 2; done
   kubectl wait --for=condition=Ready nodes --all --timeout=180s >/dev/null
+  # k3s adds its own metrics-server a few seconds after the node is Ready: wait for it, so configure
+  # sees it (the pack's brick is dropped, as on a customer k3s) and kubectl top works from the start
+  case " ${K3S_EXEC:-} " in
+    *metrics-server*) ;;
+    *) for i in $(seq 90); do kubectl -n kube-system get deploy metrics-server >/dev/null 2>&1 && break; sleep 2; done
+       kubectl -n kube-system rollout status deploy/metrics-server --timeout=180s >/dev/null ;;
+  esac
   log "node ready: $(kubectl get nodes -o jsonpath='{.items[0].status.nodeInfo.kubeletVersion}'), allocatable $(kubectl get nodes -o jsonpath='{.items[0].status.allocatable.cpu} CPU, {.items[0].status.allocatable.memory}')"
   printf '%s\t%s\t%s\n' "$cpu" "$mem" "$(kubectl get nodes -o jsonpath='{.items[0].status.nodeInfo.kubeletVersion}')" >"$OUT/runner.tsv"
 
