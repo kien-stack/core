@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.9](https://github.com/kien-stack/essential/compare/v0.3.8...v0.3.9) (2026-11-16)
+
+
+### Bug fixes
+
+* **try:** uninstall really removes the demo ([#49](https://github.com/kien-stack/essential/issues/49)) ([02e5792](https://github.com/kien-stack/essential/commit/02e57927d7512abda5eff3cc23de6aa4444955b0))
+
 ## [0.3.8](https://github.com/kien-stack/essential/compare/v0.3.7...v0.3.8) (2026-11-16)
 
 
