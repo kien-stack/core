@@ -68,7 +68,7 @@ D="$dom" V="$REF" EL="$(yq -o=json -I=0 '.spec.generators[0].list.elements' argo
     {"target": {"kind": "ApplicationSet", "name": "platform"}, "patch": ([
       {"op": "replace", "path": "/spec/generators/0/list/elements", "value": (strenv(EL) | from_json)}] | to_json)}]' argocd/app-of-apps.yaml
 
-bash install.sh install
+KSTACK_DEMO=1 bash install.sh install
 cat <<TXT
 
   This is a demo: it tracks the public release $REF, self-signed certs, no customisation.

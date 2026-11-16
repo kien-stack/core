@@ -101,7 +101,7 @@ doctor() {
   fi
 
   local r; r=$(repo)
-  case "$r" in *kien-stack/essential*|*dedsxc/kien-stack-essential*) warn "argocd/app-of-apps.yaml still points to our public repo: put your fork's URL there (and in argocd/applications/*/appset.yaml)" ;; esac
+  [ -n "${KSTACK_DEMO:-}" ] || case "$r" in *kien-stack/essential*|*dedsxc/kien-stack-essential*) warn "argocd/app-of-apps.yaml still points to our public repo: put your fork's URL there (and in argocd/applications/*/appset.yaml)" ;; esac
   if grep -rq "repoURL: $r" "$ROOT"/argocd/applications/*/appset.yaml && [ "$(grep -rh 'repoURL:' "$ROOT"/argocd/applications/*/appset.yaml | sort -u | wc -l)" -eq 1 ]; then
     ok "ApplicationSets follow the same repo as app-of-apps"
   else ko "argocd/applications/*/appset.yaml must use the same repoURL as argocd/app-of-apps.yaml ($r)"; fail=1; fi
@@ -109,7 +109,10 @@ doctor() {
   else ko "Git repo unreachable: $r (private repo? set GIT_USERNAME/GIT_TOKEN)"; fail=1; fi
 
   # ArgoCD deploys what is in Git, not this folder: local edits must be committed and pushed
-  if git -C "$ROOT" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+  # try.sh (demo) edits cluster.yaml / argocd/ locally on purpose and pins our public release: skip the Git checks
+  if [ -n "${KSTACK_DEMO:-}" ]; then
+    ok "demo mode: local settings, ArgoCD follows the public release"
+  elif git -C "$ROOT" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
     if [ -n "$(git -C "$ROOT" status --porcelain -- cluster.yaml argocd helm 2>/dev/null)" ]; then
       ko "uncommitted changes in cluster.yaml / argocd/ / helm/: ArgoCD only sees Git. Commit and push them: git -C $ROOT commit -am 'my settings' && git -C $ROOT push"; fail=1
     else
