@@ -41,7 +41,7 @@ if [ "${1:-}" = uninstall ]; then
   for d in helm/apps/*/; do [ -d "$d" ] && { ns="$ns $(basename "$d")"; rel="$rel $(basename "$d")"; }; done
   kubectl -n argocd scale deploy argocd-applicationset-controller --replicas=0 >/dev/null 2>&1 || true
   kubectl -n argocd scale statefulset argocd-application-controller --replicas=0 >/dev/null 2>&1 || true
-  for a in $(kubectl -n argocd get applications -o name 2>/dev/null); do
+  for a in $(kubectl -n argocd get applications,applicationsets,appprojects -o name 2>/dev/null); do
     kubectl -n argocd patch "$a" --type merge -p '{"metadata":{"finalizers":null}}' >/dev/null 2>&1 || true
   done
   kubectl -n argocd delete applications,applicationsets,appprojects --all --wait=false >/dev/null 2>&1 || true
