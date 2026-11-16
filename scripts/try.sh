@@ -55,9 +55,9 @@ if [ "${1:-}" = uninstall ]; then
   ops="cert-manager cnpg-system external-secrets openebs"
   first=$(for n in $ns; do case " $ops " in *" $n "*) ;; *) echo "$n" ;; esac; done)
   log "deleting namespaces: $(echo $first)"
-  kubectl delete ns $first --ignore-not-found --wait=true --timeout=3m || true
+  kubectl delete ns $first --ignore-not-found --wait=true --timeout=90s 2>/dev/null || true
   log "deleting operators: $ops"
-  kubectl delete ns $ops --ignore-not-found --wait=true --timeout=3m || true
+  kubectl delete ns $ops --ignore-not-found --wait=true --timeout=90s 2>/dev/null || true
   # Anything still stuck on a finalizer (operator already gone): clear it
   for n in $ns; do
     kubectl get ns "$n" >/dev/null 2>&1 || continue
