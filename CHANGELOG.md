@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.8](https://github.com/kien-stack/essential/compare/v0.3.7...v0.3.8) (2026-11-16)
+
+
+### Bug fixes
+
+* **try:** skip the Git checks in demo mode ([#47](https://github.com/kien-stack/essential/issues/47)) ([846639b](https://github.com/kien-stack/essential/commit/846639bf5c6e7899222d18bbdc13655b3e714ea2))
+
 ## [0.3.7](https://github.com/kien-stack/essential/compare/v0.3.6...v0.3.7) (2026-11-15)
 
 
