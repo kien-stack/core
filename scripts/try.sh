@@ -32,8 +32,6 @@ else mkdir -p "$DIR"; git -c advice.detachedHead=false clone -q --depth 1 -b "$R
 cd "$DIR/src"
 
 if [ "${1:-}" = uninstall ]; then
-  # Order matters: ArgoCD manages itself, so stop the self-management first or it deletes its own
-  # controller and the remaining Applications hang on their finalizers.
   # Deterministic, does not depend on ArgoCD pruning (ArgoCD manages itself and can take itself down first):
   # orphan every Application, remove ArgoCD, then delete the demo namespaces and the cluster-wide
   # objects of each release (webhooks left behind would break the API server for those kinds).
