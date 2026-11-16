@@ -50,8 +50,24 @@ if [ "${1:-}" = uninstall ]; then
     kubectl delete validatingwebhookconfigurations,mutatingwebhookconfigurations,apiservices,clusterrolebindings,clusterroles \
       -l app.kubernetes.io/instance="$r" --ignore-not-found >/dev/null 2>&1 || true
   done
-  log "deleting namespaces: $(echo $ns)"
-  kubectl delete ns $ns --ignore-not-found --wait=true --timeout=5m || log "some namespaces are still terminating"
+  # Workloads first, while the operators (CloudNativePG, External Secrets, cert-manager, OpenEBS) still run
+  # and can clear the finalizers of their own resources; then the operators.
+  ops="cert-manager cnpg-system external-secrets openebs"
+  first=$(for n in $ns; do case " $ops " in *" $n "*) ;; *) echo "$n" ;; esac; done)
+  log "deleting namespaces: $(echo $first)"
+  kubectl delete ns $first --ignore-not-found --wait=true --timeout=3m || true
+  log "deleting operators: $ops"
+  kubectl delete ns $ops --ignore-not-found --wait=true --timeout=3m || true
+  # Anything still stuck on a finalizer (operator already gone): clear it
+  for n in $ns; do
+    kubectl get ns "$n" >/dev/null 2>&1 || continue
+    for r in $(kubectl api-resources --namespaced --verbs=list -o name 2>/dev/null); do
+      for o in $(kubectl -n "$n" get "$r" -o name 2>/dev/null); do
+        kubectl -n "$n" patch "$o" --type merge -p '{"metadata":{"finalizers":null}}' >/dev/null 2>&1 || true
+      done
+    done
+  done
+  kubectl delete ns $ns --ignore-not-found --wait=true --timeout=2m >/dev/null 2>&1 || log "some namespaces are still terminating: kubectl get ns"
   log "done (CRDs and StorageClasses are kept)"; exit 0
 fi
 
