@@ -32,19 +32,43 @@ else mkdir -p "$DIR"; git -c advice.detachedHead=false clone -q --depth 1 -b "$R
 cd "$DIR/src"
 
 if [ "${1:-}" = uninstall ]; then
-  # Order matters: ArgoCD manages itself, so stop the self-management first or it deletes its own
-  # controller and the remaining Applications hang on their finalizers.
-  log "removing the platform (ArgoCD apps, then ArgoCD)"
-  unfin() { kubectl -n argocd patch application "$1" --type merge -p '{"metadata":{"finalizers":null}}' >/dev/null 2>&1 || true; }
-  unfin app-of-apps; kubectl -n argocd delete application app-of-apps --ignore-not-found --wait=false >/dev/null 2>&1 || true
-  kubectl -n argocd delete applicationsets --all --cascade=orphan >/dev/null 2>&1 || true
-  unfin argocd; kubectl -n argocd delete application argocd --ignore-not-found >/dev/null 2>&1 || true
-  kubectl -n argocd delete applications --all --wait=true --timeout=5m || {
-    log "some apps did not finish pruning: forcing"
-    for a in $(kubectl -n argocd get applications -o name 2>/dev/null); do unfin "${a#*/}"; done; }
-  kubectl -n argocd delete appprojects platform apps --ignore-not-found >/dev/null 2>&1 || true
-  helm uninstall argocd -n argocd --wait 2>/dev/null || true
-  log "done (namespaces, CRDs and PVCs are kept; delete them with kubectl if you want)"; exit 0
+  # Deterministic, does not depend on ArgoCD pruning (ArgoCD manages itself and can take itself down first):
+  # orphan every Application, remove ArgoCD, then delete the demo namespaces and the cluster-wide
+  # objects of each release (webhooks left behind would break the API server for those kinds).
+  log "removing the platform (ArgoCD, the demo namespaces and their cluster-wide objects)"
+  rel=$(yq -r '.spec.generators[0].list.elements[].app' argocd/applications/platform/appset.yaml)
+  ns=$(yq -r '.spec.generators[0].list.elements[].namespace' argocd/applications/platform/appset.yaml | grep -vx kube-system | sort -u)
+  for d in helm/apps/*/; do [ -d "$d" ] && { ns="$ns $(basename "$d")"; rel="$rel $(basename "$d")"; }; done
+  kubectl -n argocd scale deploy argocd-applicationset-controller --replicas=0 >/dev/null 2>&1 || true
+  kubectl -n argocd scale statefulset argocd-application-controller --replicas=0 >/dev/null 2>&1 || true
+  for a in $(kubectl -n argocd get applications,applicationsets,appprojects -o name 2>/dev/null); do
+    kubectl -n argocd patch "$a" --type merge -p '{"metadata":{"finalizers":null}}' >/dev/null 2>&1 || true
+  done
+  kubectl -n argocd delete applications,applicationsets,appprojects --all --wait=false >/dev/null 2>&1 || true
+  helm uninstall argocd -n argocd --wait >/dev/null 2>&1 || true
+  for r in $rel; do
+    kubectl delete validatingwebhookconfigurations,mutatingwebhookconfigurations,apiservices,clusterrolebindings,clusterroles \
+      -l app.kubernetes.io/instance="$r" --ignore-not-found >/dev/null 2>&1 || true
+  done
+  # Workloads first, while the operators (CloudNativePG, External Secrets, cert-manager, OpenEBS) still run
+  # and can clear the finalizers of their own resources; then the operators.
+  ops="cert-manager cnpg-system external-secrets openebs"
+  first=$(for n in $ns; do case " $ops " in *" $n "*) ;; *) echo "$n" ;; esac; done)
+  log "deleting namespaces: $(echo $first)"
+  kubectl delete ns $first --ignore-not-found --wait=true --timeout=90s 2>/dev/null || true
+  log "deleting operators: $ops"
+  kubectl delete ns $ops --ignore-not-found --wait=true --timeout=90s 2>/dev/null || true
+  # Anything still stuck on a finalizer (operator already gone): clear it
+  for n in $ns; do
+    kubectl get ns "$n" >/dev/null 2>&1 || continue
+    for r in $(kubectl api-resources --namespaced --verbs=list -o name 2>/dev/null); do
+      for o in $(kubectl -n "$n" get "$r" -o name 2>/dev/null); do
+        kubectl -n "$n" patch "$o" --type merge -p '{"metadata":{"finalizers":null}}' >/dev/null 2>&1 || true
+      done
+    done
+  done
+  kubectl delete ns $ns --ignore-not-found --wait=true --timeout=2m >/dev/null 2>&1 || log "some namespaces are still terminating: kubectl get ns"
+  log "done (CRDs and StorageClasses are kept)"; exit 0
 fi
 
 ip=${KSTACK_IP:-$(kubectl get nodes -o jsonpath='{.items[0].status.addresses[?(@.type=="InternalIP")].address}')}
