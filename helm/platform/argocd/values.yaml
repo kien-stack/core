@@ -1,4 +1,8 @@
 argo-cd:
+  global:
+    # The chart's own policies let anyone reach argocd-server: replaced by templates/networkpolicy.yaml
+    networkPolicy:
+      create: false
   configs:
     params:
       server.insecure: true
