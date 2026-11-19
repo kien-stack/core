@@ -36,6 +36,9 @@ networkPolicy:
   openPorts: []
   allow:
     - name: ingress
-      from: [traefik]
-      pods: {app.kubernetes.io/name: argocd-server}
-      ports: [8080]
+      from:
+        - traefik
+      pods:
+        app.kubernetes.io/name: argocd-server
+      ports:
+        - 8080

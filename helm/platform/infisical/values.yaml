@@ -82,10 +82,19 @@ networkPolicy:
   openPorts: []
   allow:
     - name: ingress
-      from: [traefik, external-secrets]
-      pods: {app: infisical-standalone, component: infisical}
-      ports: [8080]
+      from:
+        - traefik
+        - external-secrets
+      pods:
+        app: infisical-standalone
+        component: infisical
+      ports:
+        - 8080
     - name: cnpg-operator
-      from: [cnpg-system]
-      pods: {cnpg.io/podRole: instance}
-      ports: [5432, 8000]
+      from:
+        - cnpg-system
+      pods:
+        cnpg.io/podRole: instance
+      ports:
+        - 5432
+        - 8000
