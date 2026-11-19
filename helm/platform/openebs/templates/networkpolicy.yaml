@@ -1,11 +1,14 @@
 {{- /*
 NetworkPolicies of this namespace (same file in every brick, settings in values.yaml "networkPolicy").
-Ingress is denied by default; allowed: pods of the same namespace, the namespaces listed in
-networkPolicy.fromNamespaces (e.g. traefik for exposed apps, monitoring for metrics) and networkPolicy.openPorts
-from anywhere (admission webhooks called by the API server). Egress stays open.
-Needs a CNI that enforces NetworkPolicies (Cilium, Calico...). global.networkPolicies: false to disable.
+Ingress is denied by default. Allowed:
+- pods of the same namespace;
+- the monitoring namespace (metrics scraping), unless networkPolicy.monitoring: false;
+- each entry of networkPolicy.allow: namespaces "from" -> pods "pods" (labels, all pods if empty) on "ports" only;
+- networkPolicy.openPorts from anywhere (admission webhooks called by the API server, whose address is not selectable).
+Egress stays open. Needs a CNI that enforces NetworkPolicies (Cilium, Calico...). global.networkPolicies: false to disable.
 */}}
 {{- if dig "networkPolicies" true (.Values.global | default dict) }}
+{{- $np := .Values.networkPolicy | default dict }}
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
@@ -17,22 +20,49 @@ spec:
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
-  name: allow-platform
+  name: allow-same-namespace
 spec:
   podSelector: {}
   policyTypes: [Ingress]
   ingress:
     - from:
         - podSelector: {}
-        {{- range (dig "fromNamespaces" list (.Values.networkPolicy | default dict)) }}
+    {{- if dig "monitoring" true $np }}
         - namespaceSelector:
             matchLabels:
-              kubernetes.io/metadata.name: {{ . }}
-        {{- end }}
-  {{- with (dig "openPorts" list (.Values.networkPolicy | default dict)) }}
+              kubernetes.io/metadata.name: monitoring
+    {{- end }}
+    {{- with (dig "openPorts" list $np) }}
     - ports:
       {{- range . }}
         - port: {{ . }}
       {{- end }}
-  {{- end }}
+    {{- end }}
+{{- range $i, $r := (dig "allow" list $np) }}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-{{ $r.name | default $i }}
+spec:
+  podSelector:
+    {{- if $r.pods }}
+    matchLabels: {{- toYaml $r.pods | nindent 6 }}
+    {{- else }} {}
+    {{- end }}
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+      {{- range $r.from }}
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ . }}
+      {{- end }}
+      {{- with $r.ports }}
+      ports:
+        {{- range . }}
+        - port: {{ . }}
+        {{- end }}
+      {{- end }}
+{{- end }}
 {{- end }}

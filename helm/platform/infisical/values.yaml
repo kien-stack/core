@@ -76,7 +76,16 @@ valkey:
     limits:
       memory: 256Mi
 
-# Ingress allowed from these namespaces only (templates/networkpolicy.yaml): UI, External Secrets provider, CloudNativePG operator -> Postgres
+# Ingress rules (templates/networkpolicy.yaml): deny by default, same namespace and monitoring allowed.
+# allow: namespaces -> pods (labels) on these ports only. openPorts: admission webhooks (API server).
 networkPolicy:
-  fromNamespaces: [traefik, external-secrets, cnpg-system, monitoring]
   openPorts: []
+  allow:
+    - name: ingress
+      from: [traefik, external-secrets]
+      pods: {app: infisical-standalone, component: infisical}
+      ports: [8080]
+    - name: cnpg-operator
+      from: [cnpg-system]
+      pods: {cnpg.io/podRole: instance}
+      ports: [5432, 8000]
