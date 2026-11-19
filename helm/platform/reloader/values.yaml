@@ -10,3 +10,8 @@ reloader:
           memory: 64Mi
         limits:
           memory: 256Mi
+
+# Ingress allowed from these namespaces only (templates/networkpolicy.yaml)
+networkPolicy:
+  fromNamespaces: [monitoring]
+  openPorts: []

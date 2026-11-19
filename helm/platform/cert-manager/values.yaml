@@ -9,3 +9,8 @@ cert-manager:
     keep: true
   prometheus:
     enabled: false
+
+# Ingress allowed from these namespaces only (templates/networkpolicy.yaml): 10250: admission webhook (API server)
+networkPolicy:
+  fromNamespaces: [monitoring]
+  openPorts: [10250]

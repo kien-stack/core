@@ -1,0 +1,38 @@
+{{- /*
+NetworkPolicies of this namespace (same file in every brick, settings in values.yaml "networkPolicy").
+Ingress is denied by default; allowed: pods of the same namespace, the namespaces listed in
+networkPolicy.fromNamespaces (e.g. traefik for exposed apps, monitoring for metrics) and networkPolicy.openPorts
+from anywhere (admission webhooks called by the API server). Egress stays open.
+Needs a CNI that enforces NetworkPolicies (Cilium, Calico...). global.networkPolicies: false to disable.
+*/}}
+{{- if dig "networkPolicies" true (.Values.global | default dict) }}
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny-ingress
+spec:
+  podSelector: {}
+  policyTypes: [Ingress]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-platform
+spec:
+  podSelector: {}
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - podSelector: {}
+        {{- range (dig "fromNamespaces" list (.Values.networkPolicy | default dict)) }}
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ . }}
+        {{- end }}
+  {{- with (dig "openPorts" list (.Values.networkPolicy | default dict)) }}
+    - ports:
+      {{- range . }}
+        - port: {{ . }}
+      {{- end }}
+  {{- end }}
+{{- end }}

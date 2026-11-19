@@ -21,3 +21,8 @@ openebs:
     hostpathClass:
       basePath: /var/openebs/local
       isDefaultClass: false
+
+# Ingress allowed from these namespaces only (templates/networkpolicy.yaml)
+networkPolicy:
+  fromNamespaces: [monitoring]
+  openPorts: []

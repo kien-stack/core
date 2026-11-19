@@ -25,3 +25,8 @@ argo-cd:
     enabled: false
   notifications:
     enabled: false
+
+# Ingress allowed from these namespaces only (templates/networkpolicy.yaml): UI through the Gateway
+networkPolicy:
+  fromNamespaces: [traefik, monitoring]
+  openPorts: []

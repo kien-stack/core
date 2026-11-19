@@ -75,3 +75,8 @@ valkey:
       memory: 32Mi
     limits:
       memory: 256Mi
+
+# Ingress allowed from these namespaces only (templates/networkpolicy.yaml): UI, External Secrets provider, CloudNativePG operator -> Postgres instances
+networkPolicy:
+  fromNamespaces: [traefik, external-secrets, cnpg-system, monitoring]
+  openPorts: []
