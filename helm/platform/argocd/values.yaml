@@ -1,4 +1,8 @@
 argo-cd:
+  global:
+    # The chart's own policies let anyone reach argocd-server: replaced by templates/networkpolicy.yaml
+    networkPolicy:
+      create: false
   configs:
     params:
       server.insecure: true
@@ -25,3 +29,16 @@ argo-cd:
     enabled: false
   notifications:
     enabled: false
+
+# Ingress rules (templates/networkpolicy.yaml): deny by default, same namespace and monitoring allowed.
+# allow: namespaces -> pods (labels) on these ports only. openPorts: admission webhooks (API server).
+networkPolicy:
+  openPorts: []
+  allow:
+    - name: ingress
+      from:
+        - traefik
+      pods:
+        app.kubernetes.io/name: argocd-server
+      ports:
+        - 8080
