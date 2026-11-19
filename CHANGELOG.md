@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.3.10](https://github.com/kien-stack/essential/compare/v0.3.9...v0.3.10) (2026-11-19)
+
+
+### Features
+
+* **platform:** default-deny ingress NetworkPolicies ([#54](https://github.com/kien-stack/essential/issues/54)) ([6266ce6](https://github.com/kien-stack/essential/commit/6266ce67d0da6b9ae18b76c8fd5ecb34b07041a7))
+
+
+### Bug fixes
+
+* **install:** resolve *.&lt;domain&gt; to Traefik inside the cluster ([#53](https://github.com/kien-stack/essential/issues/53)) ([9fd188f](https://github.com/kien-stack/essential/commit/9fd188fe055f67659562a6f7e227dc92f6cf4f53))
+
 ## [0.3.9](https://github.com/kien-stack/essential/compare/v0.3.8...v0.3.9) (2026-11-16)
 
 
