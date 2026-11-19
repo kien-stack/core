@@ -17,7 +17,7 @@ metadata:
   namespace: cert-manager
 spec:
   isCA: true
-  commonName: kien-stack-ca
+  commonName: cluster-ca
   secretName: selfsigned-ca
   duration: 87600h
   privateKey:
