@@ -5,6 +5,11 @@ Pods created by operators (CloudNativePG instances, ClickHouse) are not in the H
 labels in OPERATOR_LABELS to accept them."""
 import sys, yaml
 
+# Some charts render a bare "=" (YAML value tag), unknown to SafeLoader: read it as a string.
+class Loader(yaml.SafeLoader):
+    pass
+Loader.add_constructor("tag:yaml.org,2002:value", Loader.construct_yaml_str)
+
 OPERATOR_LABELS = [{"cnpg.io/podRole": "instance"}]
 
 def pod_labels(doc):
@@ -21,7 +26,7 @@ def pod_labels(doc):
 
 fail = 0
 for path in sys.argv[1:]:
-    docs = [d for d in yaml.safe_load_all(open(path)) if isinstance(d, dict)]
+    docs = [d for d in yaml.load_all(open(path), Loader=Loader) if isinstance(d, dict)]
     pods = [l for l in (pod_labels(d) for d in docs) if l is not None] + OPERATOR_LABELS
     for d in docs:
         # Only ours (templates/networkpolicy.yaml); upstream charts may target pods created at runtime.
