@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.11](https://github.com/kien-stack/essential/compare/v0.3.10...v0.3.11) (2026-11-19)
+
+
+### Bug fixes
+
+* **cert-manager:** rename CA to cluster-ca like full ([#56](https://github.com/kien-stack/essential/issues/56)) ([ccc090c](https://github.com/kien-stack/essential/commit/ccc090cacaaac0208dcb8b1b598efa4ac3ffb2d3))
+
 ## [0.3.10](https://github.com/kien-stack/essential/compare/v0.3.9...v0.3.10) (2026-11-19)
 
 
