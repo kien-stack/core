@@ -209,12 +209,37 @@ bootstrap_secrets() {
   return 0
 }
 
+# In-cluster resolution of *.<domain> -> Traefik. Apps call each other over https://<app>.<domain>
+# (OIDC with Authentik...). On minikube, k3d or behind NAT the public IP is often not reachable from the pods:
+# CoreDNS then answers with the Traefik service. On by default for sslip.io / nip.io domains,
+# KSTACK_INTERNAL_DNS=1|0 to force. Idempotent. CoreDNS belongs to the distribution: bootstrap step, not ArgoCD.
+internal_dns() {
+  local d want cf re rule
+  d=$(cfg .global.domain)
+  want=${KSTACK_INTERNAL_DNS:-}
+  if [ -z "$want" ]; then case "$d" in *.sslip.io|*.nip.io) want=1 ;; *) want=0 ;; esac; fi
+  [ "$want" = 1 ] || return 0
+  if ! cf=$(kubectl -n kube-system get configmap coredns -o jsonpath='{.data.Corefile}' 2>/dev/null) || [ -z "$cf" ]; then
+    warn "no kube-system/coredns ConfigMap: resolve *.$d to traefik.traefik.svc yourself"; return 0
+  fi
+  if grep -q "platform internal-dns" <<<"$cf"; then ok "CoreDNS: *.$d -> Traefik (already set)"; return 0; fi
+  re=${d//./\\.}
+  rule="    rewrite name regex (.*)\\.$re traefik.traefik.svc.cluster.local answer auto # platform internal-dns"
+  cf=$(awk -v r="$rule" '!done && /^[[:space:]]*kubernetes[[:space:]]/ {print r; done=1} {print}' <<<"$cf")
+  if ! grep -q "platform internal-dns" <<<"$cf"; then warn "CoreDNS: no kubernetes block, rewrite not added"; return 0; fi
+  kubectl -n kube-system create configmap coredns --from-literal=Corefile="$cf" --dry-run=client -o yaml \
+    | kubectl -n kube-system apply -f - >/dev/null 2>&1
+  kubectl -n kube-system rollout restart deployment coredns >/dev/null 2>&1 || true
+  ok "CoreDNS: *.$d -> Traefik inside the cluster (KSTACK_INTERNAL_DNS=0 to skip)"
+}
+
 install() {
   local comps; comps=$(enabled_components)
   log "Pack $PACK -> ArgoCD will deploy: $(tr '\n' ' ' <<<"$comps")"
   doctor || die "doctor failed: fix the prerequisites above"
 
   bootstrap_secrets "$comps"
+  internal_dns
 
   if grep -qx cilium <<<"$comps"; then
     log "Installing Cilium (CNI, before everything else; then managed by ArgoCD)"
