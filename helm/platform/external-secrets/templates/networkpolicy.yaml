@@ -1,12 +1,3 @@
-{{- /*
-NetworkPolicies of this namespace (same file in every brick, settings in values.yaml "networkPolicy").
-Ingress is denied by default. Allowed:
-- pods of the same namespace;
-- the monitoring namespace (metrics scraping), unless networkPolicy.monitoring: false;
-- each entry of networkPolicy.allow: namespaces "from" -> pods "pods" (labels, all pods if empty) on "ports" only;
-- networkPolicy.openPorts from anywhere (admission webhooks called by the API server, whose address is not selectable).
-Egress stays open. Needs a CNI that enforces NetworkPolicies (Cilium, Calico...). global.networkPolicies: false to disable.
-*/}}
 {{- if dig "networkPolicies" true (.Values.global | default dict) }}
 {{- $np := .Values.networkPolicy | default dict }}
 apiVersion: networking.k8s.io/v1
