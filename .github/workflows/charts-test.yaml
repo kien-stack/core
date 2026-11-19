@@ -78,10 +78,13 @@ jobs:
         run: |
           set -euo pipefail
           n=$(basename "$CHART")
-          helm template "$n" "$CHART" -n "$n" -f cluster.yaml --include-crds \
-            | kubeconform -strict -summary -ignore-missing-schemas -kubernetes-version 1.33.0 \
+          helm template "$n" "$CHART" -n "$n" -f cluster.yaml --include-crds > /tmp/rendered.yaml
+          kubeconform -strict -summary -ignore-missing-schemas -kubernetes-version 1.33.0 \
                 -schema-location default \
-                -schema-location 'https://raw.githubusercontent.com/datreeio/CRDs-catalog/main/{{.Group}}/{{.ResourceKind}}_{{.ResourceAPIVersion}}.json'
+                -schema-location 'https://raw.githubusercontent.com/datreeio/CRDs-catalog/main/{{.Group}}/{{.ResourceKind}}_{{.ResourceAPIVersion}}.json' \
+                /tmp/rendered.yaml
+          # Every NetworkPolicy of ours must target at least one pod (labels can change on chart upgrades).
+          python3 hack/netpol-check.py /tmp/rendered.yaml
 
   result:
     # Single required check for branch protection / Renovate automerge.
