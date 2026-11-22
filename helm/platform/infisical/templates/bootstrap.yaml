@@ -1,0 +1,121 @@
+{{- /* Turnkey Infisical <-> External Secrets, one Infisical project for the whole cluster.
+  1. ExternalSecret infisical-admin: admin email + password generated in-cluster (password-cluster-generator), never in Git.
+  2. Job infisical-bootstrap (ArgoCD PostSync, runs once): bootstraps the instance (admin user + org), creates the project
+     "kubernetes" (envs dev/staging/prod) and the machine identity "external-secrets" (Universal Auth, viewer on that
+     project only), writes its credentials to external-secrets/infisical-universal-auth. The admin token is used in
+     memory only, never stored.
+  3. ClusterSecretStores infisical-<env> (external-secrets brick): one per environment of the project "kubernetes".
+  Usage: one folder per app in the project (/shop-api), then in the app an ExternalSecret on store infisical-prod with
+  dataFrom.find.path: /shop-api (all its secrets) or data.remoteRef.key: /shop-api/DB_PASSWORD. */ -}}
+{{- $b := .Values.bootstrap | default dict }}
+{{- if dig "enabled" true $b }}
+{{- $api := printf "http://infisical-infisical-standalone-infisical.%s.svc:8080" .Release.Namespace }}
+{{- $img := dig "image" "alpine/k8s:1.33.4" $b }}
+{{- $eso := dig "esoNamespace" "external-secrets" $b }}
+apiVersion: external-secrets.io/v1
+kind: ExternalSecret
+metadata:
+  annotations:
+    argocd.argoproj.io/sync-options: SkipDryRunOnMissingResource=true
+  name: infisical-admin
+spec:
+  refreshInterval: "0"
+  target:
+    name: infisical-admin
+    creationPolicy: Owner
+    deletionPolicy: Retain
+    template:
+      type: Opaque
+      engineVersion: v2
+      data:
+        email: {{ dig "adminEmail" (printf "admin@%s" .Values.global.domain) $b | quote }}
+        password: {{`'{{ .password }}'`}}
+  dataFrom:
+    - sourceRef:
+        generatorRef:
+          apiVersion: generators.external-secrets.io/v1alpha1
+          kind: ClusterGenerator
+          name: password-cluster-generator
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: infisical-bootstrap
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: infisical-bootstrap
+  # Only Secrets of the External Secrets namespace (to write infisical-universal-auth).
+  namespace: {{ $eso }}
+rules:
+  - apiGroups: [""]
+    resources: [secrets]
+    verbs: [get, create]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: infisical-bootstrap
+  namespace: {{ $eso }}
+roleRef: {apiGroup: rbac.authorization.k8s.io, kind: Role, name: infisical-bootstrap}
+subjects: [{kind: ServiceAccount, name: infisical-bootstrap, namespace: {{ .Release.Namespace }}}]
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: infisical-bootstrap
+data:
+  bootstrap.sh: |
+    set -eu
+    API={{ $api }}/api
+    ESO_NS={{ $eso }}
+    PROJECT={{ dig "secrets" "infisical" "projectSlug" "kubernetes" (.Values.global | default dict) }}
+    if kubectl -n $ESO_NS get secret infisical-universal-auth >/dev/null 2>&1; then echo "already done"; exit 0; fi
+    until curl -sf $API/status >/dev/null; do echo "waiting for Infisical"; sleep 5; done
+    j() { curl -sS -H "content-type: application/json" "$@"; }
+    PW=$(cat /admin/password); EMAIL=$(cat /admin/email)
+    R=$(j -X POST $API/v1/admin/bootstrap -d "{\"email\":\"$EMAIL\",\"password\":\"$PW\",\"organization\":\"{{ dig "organization" "kien-stack" $b }}\"}")
+    T=$(echo "$R" | jq -r '.identity.credentials.token // empty')
+    [ -n "$T" ] || { echo "bootstrap failed: $(echo "$R" | jq -c .message). Already bootstrapped without the identity? Reinstall Infisical (delete its namespace)."; exit 1; }
+    ORG=$(echo "$R" | jq -r .organization.id); H="Authorization: Bearer $T"
+    echo "instance bootstrapped (admin: $EMAIL)"
+    P=$(j -X POST $API/v2/workspace -H "$H" -d "{\"projectName\":\"$PROJECT\",\"slug\":\"$PROJECT\"}" | jq -r .project.id)
+    I=$(j -X POST $API/v1/identities -H "$H" -d "{\"name\":\"external-secrets\",\"organizationId\":\"$ORG\",\"role\":\"no-access\"}" | jq -r .identity.id)
+    j -X POST $API/v1/auth/universal-auth/identities/$I -H "$H" -d '{"accessTokenTTL":2592000,"accessTokenMaxTTL":2592000}' >/dev/null
+    j -X POST $API/v2/workspace/$P/identity-memberships/$I -H "$H" -d '{"role":"viewer"}' >/dev/null
+    # The project is created by the bootstrap identity: make the admin user a member so he sees it in the UI.
+    j -X POST $API/v2/workspace/$P/memberships -H "$H" -d "{\"emails\":[\"$EMAIL\"],\"roleSlugs\":[\"admin\"]}" | jq -e '.memberships|length>0' >/dev/null || { echo "admin membership failed"; exit 1; }
+    CID=$(j $API/v1/auth/universal-auth/identities/$I -H "$H" | jq -r .identityUniversalAuth.clientId)
+    CS=$(j -X POST $API/v1/auth/universal-auth/identities/$I/client-secrets -H "$H" -d '{"description":"external-secrets"}' | jq -r .clientSecret)
+    for v in "$P" "$I" "$CID" "$CS"; do [ -n "$v" ] && [ "$v" != null ] || { echo "setup failed"; exit 1; }; done
+    kubectl -n $ESO_NS create secret generic infisical-universal-auth --from-literal=clientId="$CID" --from-literal=clientSecret="$CS"
+    echo "project $PROJECT + identity external-secrets (viewer) created"
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: infisical-bootstrap
+  annotations:
+    argocd.argoproj.io/hook: PostSync
+    argocd.argoproj.io/hook-delete-policy: BeforeHookCreation
+spec:
+  backoffLimit: 20
+  template:
+    spec:
+      serviceAccountName: infisical-bootstrap
+      restartPolicy: OnFailure
+      securityContext: {runAsNonRoot: true, runAsUser: 1000, seccompProfile: {type: RuntimeDefault}}
+      containers:
+        - name: run
+          image: {{ $img }}
+          command: [bash, /scripts/bootstrap.sh]
+          securityContext: {allowPrivilegeEscalation: false, capabilities: {drop: [ALL]}}
+          resources: {requests: {cpu: 10m, memory: 32Mi}, limits: {memory: 256Mi}}
+          volumeMounts:
+            - {name: scripts, mountPath: /scripts}
+            - {name: admin, mountPath: /admin}
+      volumes:
+        - {name: scripts, configMap: {name: infisical-bootstrap}}
+        - {name: admin, secret: {secretName: infisical-admin}}
+{{- end }}

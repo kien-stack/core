@@ -9,7 +9,6 @@
 # After that, ArgoCD applies whatever you push. https://raw.githubusercontent.com/kien-stack/essential/main/scripts/install.sh does the edits for you.
 # Optional environment variables (secrets, never stored in Git):
 #   GIT_USERNAME / GIT_TOKEN          private GitOps repo (HTTPS)
-#   INFISICAL_CLIENT_ID / INFISICAL_CLIENT_SECRET   if global.secrets.provider=infisical
 #   DNS01_API_TOKEN                   if global.tls.issuer=letsencrypt-dns01
 #   EXTERNAL_DNS_API_TOKEN            if the external-dns brick is enabled
 set -euo pipefail
@@ -28,7 +27,7 @@ warn() { printf '  \033[33mWARN\033[0m %s\n' "$*"; }
 ko()   { printf '  \033[31mKO\033[0m   %s\n' "$*"; }
 die()  { printf '\033[31m[kien/stack] ERROR:\033[0m %s\n' "$*" >&2; exit 1; }
 
-usage() { sed -n '2,14p' "$0" | sed 's/^# \{0,1\}//'; }
+usage() { sed -n '2,13p' "$0" | sed 's/^# \{0,1\}//'; }
 
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -139,9 +138,6 @@ doctor() {
     selfsigned) ok "self-signed certificates" ;;
     *) ko "invalid global.tls.issuer"; fail=1 ;;
   esac
-  if [ "$(cfg .global.secrets.provider)" = infisical ]; then
-    if [ -n "${INFISICAL_CLIENT_ID:-}" ] && [ -n "${INFISICAL_CLIENT_SECRET:-}" ]; then ok "Infisical credentials"; else ko "INFISICAL_CLIENT_ID/INFISICAL_CLIENT_SECRET required"; fail=1; fi
-  fi
   if [ "$fail" -eq 0 ]; then log "doctor: OK"; else log "doctor: some prerequisites are missing"; fi
   return "$fail"
 }
@@ -188,13 +184,7 @@ bootstrap_secrets() {
   if has external-dns && [ -n "${EXTERNAL_DNS_API_TOKEN:-}" ]; then
     ensure_secret external-dns external-dns-api-token "api-token=$EXTERNAL_DNS_API_TOKEN"
   fi
-  if [ "$provider" = infisical ]; then
-    ensure_secret external-secrets "$(cfg .global.secrets.infisical.credentialsSecret)" \
-      "clientId=${INFISICAL_CLIENT_ID:?}" "clientSecret=${INFISICAL_CLIENT_SECRET:?}"
-    ok "ClusterSecretStore 'infisical' will be created: use ExternalSecrets in your apps"
-    return
-  fi
-  # provider none: generation locale (valeurs aleatoires), jamais commitees
+  # Platform secrets: generated locally (random), never committed. Your app secrets: Infisical (stores infisical-<project>-<env>).
   if has litellm; then
     local mk; mk="sk-$(randpw 32)"
     ensure_secret litellm litellm-masterkey "masterkey=$mk"
