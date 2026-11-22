@@ -14,11 +14,10 @@ This is the platform base of every pack, monitoring included. In Essential, Graf
 | Pack | What you get | Status |
 |---|---|---|
 | **Essential** (this repo) | Platform base: GitOps platform above + monitoring (Grafana with a local admin, no SSO) | Free, open source |
-| **Private AI** | Platform base (monitoring included, no SSO) + self-hosted AI (Ollama, LiteLLM, Onyx, Langfuse, Coder, OpenClaw) | Available |
-| **All-In-One** (full) | Private AI + Authentik SSO (Grafana and apps log in with it), Velero backups, Argo Rollouts, Image Updater, Radar, Renovate | Available |
-| **Pro** | HA, multi-DC, disaster recovery | Planned, not available yet (no repo) |
+| **AI Platform** | Platform base (monitoring included, no SSO) + self-hosted AI (Ollama, LiteLLM, Onyx, Langfuse, Coder, OpenClaw) | Available |
+| **Pro** | AI Platform + Authentik SSO (Grafana and apps log in with it), Velero backups, Argo Rollouts, Image Updater, Radar, Renovate. Planned: HA, multi-DC, disaster recovery | Available (HA, multi-DC, DR planned) |
 
-Pro adds HA, multi-DC and disaster recovery only (planned, no repo yet); SSO (Authentik) stays in All-In-One.
+Pro is the former All-In-One pack (`kien-stack/full`) plus the enterprise features. Shipped today: Authentik SSO, Velero backups (in-cluster SeaweedFS S3; add an off-cluster S3 location for disaster recovery), Argo Rollouts, Image Updater, Radar, Renovate. Planned, not available yet: HA, multi-DC, full disaster recovery.
 
 ## Try it
 
