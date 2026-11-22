@@ -106,3 +106,10 @@ networkPolicy:
       ports:
         - 5432
         - 8000
+
+bootstrap:
+  # Apps whose folder /<app> is created by the bootstrap Job in envs dev/staging/prod of the project
+  # (first ExternalSecret sync immediate). Simple names only (^[a-zA-Z0-9_-]+$). The Job runs once:
+  # apps added later need their folders created by hand (Infisical UI) or an Infisical reinstall.
+  appFolders:
+    - hello

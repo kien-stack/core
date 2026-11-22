@@ -5,13 +5,22 @@
      project only), writes its credentials to external-secrets/infisical-universal-auth. The admin token is used in
      memory only, never stored.
   3. ClusterSecretStores infisical-<env> (external-secrets brick): one per environment of the project "kubernetes".
-  Usage: one folder per app in the project (/shop-api), then in the app an ExternalSecret on store infisical-prod with
+  Usage: one folder per app in the project (/shop-api). Folders /<app> of bootstrap.appFolders (default [hello]) are
+  created by the Job in dev/staging/prod, so the first ExternalSecret sync of these apps is immediate; other apps: create
+  the folder in the Infisical UI. Then in the app an ExternalSecret on store infisical-prod with
   dataFrom.find.path: /shop-api (all its secrets) or data.remoteRef.key: /shop-api/DB_PASSWORD. */ -}}
 {{- $b := .Values.bootstrap | default dict }}
 {{- if dig "enabled" true $b }}
 {{- $api := printf "http://infisical-infisical-standalone-infisical.%s.svc:8080" .Release.Namespace }}
 {{- $img := dig "image" "alpine/k8s:1.33.4" $b }}
 {{- $eso := dig "esoNamespace" "external-secrets" $b }}
+{{- $apps := list }}
+{{- range (dig "appFolders" (list "hello") $b) }}
+{{- if not (regexMatch "^[a-zA-Z0-9_-]+$" (toString .)) }}
+{{- fail (printf "bootstrap.appFolders: invalid app name %q (allowed: ^[a-zA-Z0-9_-]+$)" (toString .)) }}
+{{- end }}
+{{- $apps = append $apps (toString .) }}
+{{- end }}
 apiVersion: external-secrets.io/v1
 kind: ExternalSecret
 metadata:
@@ -71,6 +80,7 @@ data:
     API={{ $api }}/api
     ESO_NS={{ $eso }}
     PROJECT={{ dig "secrets" "infisical" "projectSlug" "kubernetes" (.Values.global | default dict) }}
+    # Runs once: folders of apps added to bootstrap.appFolders later must be created by hand (UI) or by reinstalling Infisical.
     if kubectl -n $ESO_NS get secret infisical-universal-auth >/dev/null 2>&1; then echo "already done"; exit 0; fi
     until curl -sf $API/status >/dev/null; do echo "waiting for Infisical"; sleep 5; done
     j() { curl -sS -H "content-type: application/json" "$@"; }
@@ -86,6 +96,16 @@ data:
     j -X POST $API/v2/workspace/$P/identity-memberships/$I -H "$H" -d '{"role":"viewer"}' >/dev/null
     # The project is created by the bootstrap identity: make the admin user a member so he sees it in the UI.
     j -X POST $API/v2/workspace/$P/memberships -H "$H" -d "{\"emails\":[\"$EMAIL\"],\"roleSlugs\":[\"admin\"]}" | jq -e '.memberships|length>0' >/dev/null || { echo "admin membership failed"; exit 1; }
+    [ -n "$P" ] && [ "$P" != null ] || { echo "project creation failed"; exit 1; }
+    # One folder /<app> per listed app in each env (bootstrap.appFolders): first ExternalSecret sync is immediate.
+    for APP in{{ range $apps }} {{ . | quote }}{{ end }}; do
+      for ENV in dev staging prod; do
+        R=$(j -X POST $API/v1/folders -H "$H" -d "{\"workspaceId\":\"$P\",\"environment\":\"$ENV\",\"name\":\"$APP\",\"path\":\"/\"}")
+        if echo "$R" | jq -e '.folder.id' >/dev/null 2>&1; then echo "folder /$APP created in $ENV"
+        elif echo "$R" | grep -qi 'already exist'; then echo "folder /$APP already exists in $ENV"
+        else echo "folder /$APP creation failed in $ENV: $(echo "$R" | jq -c '.message // .' 2>/dev/null || echo unparsable response)"; exit 1; fi
+      done
+    done
     CID=$(j $API/v1/auth/universal-auth/identities/$I -H "$H" | jq -r .identityUniversalAuth.clientId)
     CS=$(j -X POST $API/v1/auth/universal-auth/identities/$I/client-secrets -H "$H" -d '{"description":"external-secrets"}' | jq -r .clientSecret)
     for v in "$P" "$I" "$CID" "$CS"; do [ -n "$v" ] && [ "$v" != null ] || { echo "setup failed"; exit 1; }; done
