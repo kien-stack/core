@@ -8,8 +8,8 @@
    curl -sfL https://get.k3s.io | INSTALL_K3S_EXEC="--disable traefik" sh -
    ```
 2. **Resources** (allocatable): 2 vCPU, 6 GB RAM (8 GB recommended), 40 GB disk.
-   The monitoring brick takes about 0.3 vCPU / 0.9 GB RAM (requests) and 12 GB of volumes; short on resources?
-   comment out `monitoring` in `argocd/applications/platform/appset.yaml`.
+   This includes monitoring, part of the platform base (about 0.3 vCPU / 0.9 GB RAM requested, 12 GB of volumes).
+   On a very small node you can still comment out `monitoring` in `argocd/applications/platform/appset.yaml`.
 3. **A load balancer** for the Traefik Service: cloud LB, k3s ServiceLB, `minikube tunnel`, or Cilium L2
    (homelab, see below). Otherwise use a NodePort (`traefik.service.spec.type: NodePort` in `cluster.yaml`, see the comment there).
 4. **Storage**: OpenEBS hostpath is installed by default (local volumes on the node disk).

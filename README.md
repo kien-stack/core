@@ -4,19 +4,21 @@ A free, open source GitOps platform for Kubernetes, installed in one command.
 Everything lives in your Git repo and ArgoCD applies it.
 
 **Included:** ArgoCD, Traefik (Gateway API), cert-manager, External Secrets + Infisical,
-CloudNativePG, Reloader, metrics-server, OpenEBS, monitoring (Prometheus, Grafana, VictoriaMetrics,
+CloudNativePG, Reloader, metrics-server, OpenEBS and monitoring (Prometheus, Grafana, VictoriaMetrics,
 VictoriaLogs). Optional: Cilium, external-dns.
+
+This is the platform base of every pack, monitoring included. In Essential, Grafana uses a local admin (no SSO).
 
 ## Packs
 
 | Pack | What you get | Status |
 |---|---|---|
-| **Essential** (this repo) | GitOps platform above, monitoring included, Grafana with a local admin | Free, open source |
-| **Private AI** | Essential + self-hosted AI (Ollama, LiteLLM, Onyx, Langfuse, Coder, OpenClaw) | Available |
-| **All-In-One** (full) | Private AI + Authentik SSO, Velero backups, Argo Rollouts, Image Updater, Radar, Renovate | Available |
-| **Pro** | HA, multi-DC, disaster recovery, SSO | Planned, not available yet |
+| **Essential** (this repo) | Platform base: GitOps platform above + monitoring (Grafana with a local admin, no SSO) | Free, open source |
+| **Private AI** | Platform base (monitoring included, no SSO) + self-hosted AI (Ollama, LiteLLM, Onyx, Langfuse, Coder, OpenClaw) | Available |
+| **All-In-One** (full) | Private AI + Authentik SSO (Grafana and apps log in with it), Velero backups, Argo Rollouts, Image Updater, Radar, Renovate | Available |
+| **Pro** | HA, multi-DC, disaster recovery | Planned, not available yet (no repo) |
 
-SSO (Authentik) ships today in All-In-One. Going forward SSO belongs to Pro; nothing is removed from All-In-One for now.
+Pro adds HA, multi-DC and disaster recovery only (planned, no repo yet); SSO (Authentik) stays in All-In-One.
 
 ## Try it
 
