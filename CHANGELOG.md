@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.12](https://github.com/kien-stack/essential/compare/v0.3.11...v0.3.12) (2026-11-22)
+
+
+### Features
+
+* **infisical:** turnkey Infisical + External Secrets (project kubernetes, stores infisical-&lt;env&gt;) ([#58](https://github.com/kien-stack/essential/issues/58)) ([799235f](https://github.com/kien-stack/essential/commit/799235f274dc435162c780a8959ce42d6f6e1cd4))
+
 ## [0.3.11](https://github.com/kien-stack/essential/compare/v0.3.10...v0.3.11) (2026-11-19)
 
 
