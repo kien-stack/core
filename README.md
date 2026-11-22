@@ -4,7 +4,19 @@ A free, open source GitOps platform for Kubernetes, installed in one command.
 Everything lives in your Git repo and ArgoCD applies it.
 
 **Included:** ArgoCD, Traefik (Gateway API), cert-manager, External Secrets + Infisical,
-CloudNativePG, Reloader, metrics-server, OpenEBS. Optional: Cilium, external-dns.
+CloudNativePG, Reloader, metrics-server, OpenEBS, monitoring (Prometheus, Grafana, VictoriaMetrics,
+VictoriaLogs). Optional: Cilium, external-dns.
+
+## Packs
+
+| Pack | What you get | Status |
+|---|---|---|
+| **Essential** (this repo) | GitOps platform above, monitoring included, Grafana with a local admin | Free, open source |
+| **Private AI** | Essential + self-hosted AI (Ollama, LiteLLM, Onyx, Langfuse, Coder, OpenClaw) | Available |
+| **All-In-One** (full) | Private AI + Authentik SSO, Velero backups, Argo Rollouts, Image Updater, Radar, Renovate | Available |
+| **Pro** | HA, multi-DC, disaster recovery, SSO | Planned, not available yet |
+
+SSO (Authentik) ships today in All-In-One. Going forward SSO belongs to Pro; nothing is removed from All-In-One for now.
 
 ## Try it
 
