@@ -18,7 +18,7 @@ kube-prometheus-stack:
         root_url: https://grafana.{{ .Values.global.domain }}
     resources:
       requests: {cpu: 50m, memory: 128Mi}
-      limits: {memory: 512Mi}  # 384Mi was OOMKilled at first start (~300Mi steady)
+      limits: {memory: 768Mi}  # 384Mi OOMKilled at first start, ~300-470Mi steady
     ingress:
       enabled: false
     plugins:
