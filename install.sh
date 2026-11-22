@@ -324,9 +324,7 @@ summary() {
   local d; d=$(cfg .global.domain)
   log "Done. Access:"
   echo "  ArgoCD : https://argocd.$d  (admin / kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath='{.data.password}' | base64 -d)"
-  local comps; comps=$(enabled_components)
-  grep -qx monitoring <<<"$comps" && echo "  Grafana  : https://grafana.$d (admin / kubectl -n monitoring get secret grafana-admin -o jsonpath='{.data.admin-password}' | base64 -d)"
-  grep -qx infisical <<<"$comps" && echo "  Infisical: https://infisical.$d (create the admin account on first visit)"
+  grep -qx infisical <<<"$(enabled_components)" && echo "  Infisical: https://infisical.$d (create the admin account on first visit)"
   echo "  Change anything: edit cluster.yaml or helm/*/<brick>/values.yaml in $(repo), push."
   [ "$(cfg .global.tls.issuer)" = selfsigned ] && echo "  (self-signed certificates: CA in cert-manager/selfsigned-ca)"
   return 0
