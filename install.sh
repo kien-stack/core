@@ -184,7 +184,8 @@ bootstrap_secrets() {
   if has external-dns && [ -n "${EXTERNAL_DNS_API_TOKEN:-}" ]; then
     ensure_secret external-dns external-dns-api-token "api-token=$EXTERNAL_DNS_API_TOKEN"
   fi
-  # Platform secrets: generated locally (random), never committed. Your app secrets: Infisical (stores infisical-<project>-<env>).
+  # Platform secrets: generated locally (random), never committed. Your app secrets: Infisical, project 'kubernetes',
+  # one folder per app, read through the ClusterSecretStores infisical-dev / infisical-staging / infisical-prod.
   if has litellm; then
     local mk; mk="sk-$(randpw 32)"
     ensure_secret litellm litellm-masterkey "masterkey=$mk"
@@ -320,11 +321,30 @@ wait_apps() {
   return 1
 }
 
+# access_box "<comps>" <domain>: URL / user / password of every enabled brick with a UI (charts in helm/).
+# Passwords are never printed: only the kubectl command that reads them. Standalone: access_box "$(enabled_components)" my.domain
+access_box() {
+  local comps=$1 d=$2 l w=0 bar
+  local -a L=("kien/stack access ($d)" "")
+  sec() { printf "kubectl -n %s get secret %s -o jsonpath='{.data.%s}' | base64 -d" "$1" "$2" "$3"; }
+  L+=("ArgoCD     https://argocd.$d" "  user      admin" "  password  $(sec argocd argocd-initial-admin-secret password)")
+  if grep -qx infisical <<<"$comps"; then
+    L+=("" "Infisical  https://infisical.$d" "  user      $(sec infisical infisical-admin email)" "  password  $(sec infisical infisical-admin password)")
+  fi
+  if grep -qx hello <<<"$comps"; then L+=("" "hello      https://hello.$d" "  no login (sample nginx app)"); fi
+  for l in "${L[@]}"; do [ ${#l} -le $w ] || w=${#l}; done
+  printf -v bar '%*s' $((w + 2)) ''; bar=${bar// /─}
+  printf '┌%s┐\n' "$bar"; printf '│ %-*s │\n' "$w" "${L[0]}"; printf '├%s┤\n' "$bar"
+  for l in "${L[@]:2}"; do printf '│ %-*s │\n' "$w" "$l"; done
+  printf '└%s┘\n' "$bar"
+}
+
 summary() {
-  local d; d=$(cfg .global.domain)
+  local d out; d=$(cfg .global.domain)
   log "Done. Access:"
-  echo "  ArgoCD : https://argocd.$d  (admin / kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath='{.data.password}' | base64 -d)"
-  grep -qx infisical <<<"$(enabled_components)" && echo "  Infisical: https://infisical.$d (create the admin account on first visit)"
+  out=$(access_box "$(enabled_components)" "$d")
+  printf '%s\n' "$out" | tee "$ROOT/kstack-access.txt"
+  echo "  (saved to $ROOT/kstack-access.txt, no password inside)"
   echo "  Change anything: edit cluster.yaml or helm/*/<brick>/values.yaml in $(repo), push."
   [ "$(cfg .global.tls.issuer)" = selfsigned ] && echo "  (self-signed certificates: CA in cert-manager/selfsigned-ca)"
   return 0
