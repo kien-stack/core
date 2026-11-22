@@ -1,5 +1,5 @@
 # An API at https://backend.<domain>, with a database password pulled from your secrets manager.
-# Needs global.secrets.provider: infisical in cluster.yaml (creates the ClusterSecretStore "infisical")
+# Needs global.secrets.provider: infisical in cluster.yaml (creates the ClusterSecretStores "infisical-<env>")
 # and "backend" in global.gatewayHosts.
 app-template:
   controller:
@@ -35,12 +35,12 @@ app-template:
       enabled: true
       refreshInterval: 1h
       secretStoreRef:
-        name: infisical
+        name: infisical-prod
         kind: ClusterSecretStore
       data:
         - secretKey: db-password
           remoteRef:
-            # secret name in your Infisical project/env (cluster.yaml), root path
+            # secret name in the Infisical project "kubernetes" (env prod), root path
             key: DB_PASSWORD
   service:
     main:
