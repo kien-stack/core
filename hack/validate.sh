@@ -7,6 +7,7 @@ KC=(kubeconform -strict -summary -ignore-missing-schemas -kubernetes-version 1.3
   -schema-location 'https://raw.githubusercontent.com/datreeio/CRDs-catalog/main/{{.Group}}/{{.ResourceKind}}_{{.ResourceAPIVersion}}.json')
 printf '%-18s ' argocd; kubectl kustomize "$ROOT/argocd/applications" | "${KC[@]}" - | tail -1
 for d in "$ROOT"/helm/platform/*/ "$ROOT"/helm/apps/*/; do
+  [ -d "$d" ] || continue   # helm/apps/ is empty until you add your apps
   n=$(basename "$d")
   helm dependency build "$d" >/dev/null 2>&1 || helm dependency update "$d" >/dev/null
   printf '%-18s ' "$n"

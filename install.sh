@@ -331,7 +331,6 @@ access_box() {
   if grep -qx infisical <<<"$comps"; then
     L+=("" "Infisical  https://infisical.$d" "  user      $(sec infisical infisical-admin email)" "  password  $(sec infisical infisical-admin password)")
   fi
-  if grep -qx hello <<<"$comps"; then L+=("" "hello      https://hello.$d" "  no login (sample nginx app)"); fi
   for l in "${L[@]}"; do [ ${#l} -le $w ] || w=${#l}; done
   printf -v bar '%*s' $((w + 2)) ''; bar=${bar// /─}
   printf '┌%s┐\n' "$bar"; printf '│ %-*s │\n' "$w" "${L[0]}"; printf '├%s┤\n' "$bar"

@@ -8,11 +8,10 @@ global:
   issuer: selfsigned-ca
   ingressClass: traefik
   # Apps exposed on the Gateway (traefik/traefik): one HTTPS listener + certificate <app>.<domain> each.
-  # Your own app in helm/apps/<app>: add it here, then an HTTPRoute (app-template "route:", see hello).
+  # Your own app in helm/apps/<app>: add it here, then an HTTPRoute (see examples/postgres-api, docs/BOOTSTRAP-APP.md).
   gatewayHosts:
     - argocd
     - infisical
-    - hello
   tls:
     # selfsigned | letsencrypt-http01 | letsencrypt-dns01 (then issuer: letsencrypt)
     issuer: selfsigned

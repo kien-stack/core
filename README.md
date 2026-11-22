@@ -29,7 +29,7 @@ Requirements: a Kubernetes cluster (2 vCPU, 8 GB RAM), `kubectl`, `helm`, `git`.
 |---|---|
 | Change my settings | Edit `cluster.yaml` |
 | Turn a component on or off | Comment or uncomment it in `argocd/applications/platform/appset.yaml` |
-| Deploy my app | Copy an example from `examples/app-template/` to `helm/apps/<my-app>/` |
+| Deploy my app | Copy an example from `examples/` to `helm/apps/<my-app>/`: [docs/BOOTSTRAP-APP.md](docs/BOOTSTRAP-APP.md) |
 | Tune a component | Edit `helm/platform/<component>/values.yaml` |
 
 Full docs: https://shop.kien.cc/docs
