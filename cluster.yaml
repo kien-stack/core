@@ -13,6 +13,7 @@ global:
     - argocd
     - infisical
     - hello
+    - grafana
   tls:
     # selfsigned | letsencrypt-http01 | letsencrypt-dns01 (then issuer: letsencrypt)
     issuer: selfsigned

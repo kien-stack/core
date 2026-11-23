@@ -100,6 +100,6 @@ cat <<TXT
 
   Real install (your domain, Let's Encrypt, your own GitOps repo):
     curl -fsSL https://raw.githubusercontent.com/kien-stack/essential/main/scripts/install.sh | bash
-  Private AI, monitoring, SSO, rollouts: https://shop.kien.cc
+  AI Platform, Pro (SSO, backups, rollouts): https://shop.kien.cc
   Remove: curl -fsSL https://raw.githubusercontent.com/kien-stack/essential/main/scripts/try.sh | bash -s uninstall
 TXT
