@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.4.2](https://github.com/kien-stack/essential/compare/v0.4.1...v0.4.2) (2026-11-23)
+
+
+### Features
+
+* **install:** Warnings and Deploy sections, /etc/hosts hint without a domain ([#74](https://github.com/kien-stack/essential/issues/74)) ([fcb9aac](https://github.com/kien-stack/essential/commit/fcb9aac9a5b1e05cffb07d606555661c1e9b97b3))
+* ordered deploy (progressive sync + DB first) ([#76](https://github.com/kien-stack/essential/issues/76)) ([dcfa419](https://github.com/kien-stack/essential/commit/dcfa4198847b31558c6badab66cc226dbf86799b))
+
 ## [0.4.1](https://github.com/kien-stack/essential/compare/v0.4.0...v0.4.1) (2026-11-23)
 
 
