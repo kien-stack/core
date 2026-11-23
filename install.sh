@@ -336,24 +336,32 @@ wait_apps() {
 # Passwords are never printed: only the kubectl command that reads them. Standalone: access_box "$(enabled_components)" my.domain
 access_box() {
   local comps=$1 d=$2 l w=0 bar
-  local -a L=("kien/stack access ($d)" "")
+  local -a B=() P=()
+  local uw=$(( ${#d} + 18 ))   # widest URL: https://infisical.<domain>
   sec() { printf "kubectl -n %s get secret %s -o jsonpath='{.data.%s}' | base64 -d" "$1" "$2" "$3"; }
   has() { kubectl -n "$1" get secret "$2" >/dev/null 2>&1; }   # only show logins that already work
   if has argocd argocd-initial-admin-secret; then
-    L+=("ArgoCD     https://argocd.$d" "  user      admin" "  password  $(sec argocd argocd-initial-admin-secret password)")
+    B+=("$(printf '%-10s %-*s user: %s' ArgoCD "$uw" "https://argocd.$d" "admin")")
+    P+=("ArgoCD      $(sec argocd argocd-initial-admin-secret password)")
   fi
   if grep -qx infisical <<<"$comps" && has infisical infisical-admin; then
-    L+=("" "Infisical  https://infisical.$d" "  user      $(sec infisical infisical-admin email)" "  password  $(sec infisical infisical-admin password)")
+    B+=("$(printf '%-10s %-*s user: %s' Infisical "$uw" "https://infisical.$d" "see below")")
+    P+=("Infisical   $(sec infisical infisical-admin password)" "  (user)    $(sec infisical infisical-admin email)")
   fi
   if grep -qx monitoring <<<"$comps" && has monitoring grafana-admin; then
-    L+=("" "Grafana    https://grafana.$d" "  user      admin" "  password  $(sec monitoring grafana-admin admin-password)")
+    B+=("$(printf '%-10s %-*s user: %s' Grafana "$uw" "https://grafana.$d" "admin")")
+    P+=("Grafana     $(sec monitoring grafana-admin admin-password)")
   fi
-  [ "${L[2]:-}" = "" ] && L=("${L[0]}" "" "${L[@]:3}")   # no leading blank line if ArgoCD is missing
-  for l in "${L[@]}"; do [ ${#l} -le $w ] || w=${#l}; done
+  [ ${#B[@]} -gt 0 ] || { echo "  No login ready yet: kubectl -n argocd get applications"; return 0; }
+  for l in "${B[@]}"; do [ ${#l} -le $w ] || w=${#l}; done
   printf -v bar '%*s' $((w + 2)) ''; bar=${bar// /─}
-  printf '┌%s┐\n' "$bar"; printf '│ %-*s │\n' "$w" "${L[0]}"; printf '├%s┤\n' "$bar"
-  for l in "${L[@]:2}"; do printf '│ %-*s │\n' "$w" "$l"; done
-  printf '└%s┘\n' "$bar"
+  echo
+  printf '  ┌%s┐\n' "$bar"
+  for l in "${B[@]}"; do printf '  │ %-*s │\n' "$w" "$l"; done
+  printf '  └%s┘\n' "$bar"
+  echo
+  echo "  Passwords (run in this terminal):"
+  for l in "${P[@]}"; do printf '    %s\n' "$l"; done
 }
 
 tunnel_hint() {
