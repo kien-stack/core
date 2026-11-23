@@ -21,11 +21,16 @@ PACK=essential
 CMD=install
 ARGOCD_TIMEOUT=${ARGOCD_TIMEOUT:-0}   # seconds to wait for the apps, 0 = until ready
 
-log()  { printf '\033[1;34m[kien/stack]\033[0m %s\n' "$*"; }
-ok()   { printf '  \033[32mOK\033[0m   %s\n' "$*"; }
-warn() { printf '  \033[33mWARN\033[0m %s\n' "$*"; }
-ko()   { printf '  \033[31mKO\033[0m   %s\n' "$*"; }
-die()  { printf '\033[31m[kien/stack] ERROR:\033[0m %s\n' "$*" >&2; exit 1; }
+# colors: only on a TTY, honour NO_COLOR and TERM=dumb (bash 3.2 safe)
+kc() { [ -t "$1" ] && [ -z "${NO_COLOR:-}" ] && [ "${TERM:-dumb}" != dumb ]; }
+# shellcheck disable=SC2034
+if kc 1; then C_H=$'\033[1;36m' C_G=$'\033[32m' C_Y=$'\033[33m' C_R=$'\033[31m' C_D=$'\033[2m' C_0=$'\033[0m'; else C_H='' C_G='' C_Y='' C_R='' C_D='' C_0=''; fi
+if kc 2; then E_R=$'\033[1;31m' E_0=$'\033[0m'; else E_R='' E_0=''; fi
+log()  { printf '%s[kien/stack]%s %s\n' "${C_H}" "${C_0}" "$*"; }
+ok()   { printf '  %sOK%s   %s\n' "${C_G}" "${C_0}" "$*"; }
+warn() { printf '  %sWARN%s %s\n' "${C_Y}" "${C_0}" "$*"; }
+ko()   { printf '  %sKO%s   %s\n' "${C_R}" "${C_0}" "$*"; }
+die()  { printf '%s[kien/stack] ERROR:%s %s\n' "${E_R}" "${E_0}" "$*" >&2; exit 1; }
 
 usage() { sed -n '2,13p' "$0" | sed 's/^# \{0,1\}//'; }
 
@@ -292,8 +297,8 @@ wait_apps() {
       j=$((j + 1)); st=""
       if [[ "$data" == *$'\n'"$a="* ]]; then st=${data#*$'\n'"$a="}; st=${st%%$'\n'*}; fi
       case "$st" in
-        Synced/Healthy) row=$'\033[32mOK\033[0m' ;;
-        */Degraded)     row=$'\033[33mDegraded\033[0m'; pending=$((pending + 1)) ;;
+        Synced/Healthy) row="${C_G}OK${C_0}" ;;
+        */Degraded)     row="${C_Y}Degraded${C_0}"; pending=$((pending + 1)) ;;
         ""|/|*/)        row="Pending"; pending=$((pending + 1)) ;;
         */Healthy)      row="Syncing"; pending=$((pending + 1)) ;;
         *)              row="${st#*/}"; pending=$((pending + 1)) ;;
@@ -344,12 +349,12 @@ access_box() {
 
 summary() {
   local d out; d=$(cfg .global.domain)
-  log "Done. Access:"
+  printf '%s[kien/stack] Done. Access:%s\n' "${C_G}" "${C_0}"
   out=$(access_box "$(enabled_components)" "$d")
   printf '%s\n' "$out" | tee "$ROOT/kstack-access.txt"
-  echo "  (saved to $ROOT/kstack-access.txt, no password inside)"
+  printf '%s  (saved to %s/kstack-access.txt, no password inside)%s\n' "${C_D}" "${ROOT}" "${C_0}"
   echo "  Change anything: edit cluster.yaml or helm/*/<brick>/values.yaml in $(repo), push."
-  [ "$(cfg .global.tls.issuer)" = selfsigned ] && echo "  (self-signed certificates: CA in cert-manager/selfsigned-ca)"
+  [ "$(cfg .global.tls.issuer)" = selfsigned ] && printf '%s  (self-signed certificates: CA in cert-manager/selfsigned-ca)%s\n' "${C_D}" "${C_0}"
   return 0
 }
 
