@@ -38,6 +38,31 @@ Or from your clone: `./install.sh` (`./install.sh configure` to change the answe
 
 Requirements: a Kubernetes cluster (2 vCPU, 8 GB RAM), `kubectl`, `helm`, `git`.
 
+### Private repo
+
+If your fork is private (GitLab, Gitea, private GitHub...), the installer needs a token to clone and push it.
+
+1. Create a token with read and write access to the repo:
+
+   | Host | Token | Permissions |
+   |---|---|---|
+   | GitLab | Personal or project access token | `read_repository`, `write_repository` |
+   | GitHub | Fine-grained personal access token | Contents: Read and write (on your fork) |
+
+2. Export it, then run the installer:
+
+   ```bash
+   export GIT_USERNAME=<your-user>
+   export GIT_TOKEN=<your-token>
+   curl -fsSL https://raw.githubusercontent.com/kien-stack/essential/main/scripts/install.sh | bash
+   ```
+
+> [!NOTE]
+> Use `export`. With `GIT_TOKEN=... curl ... | bash`, only `curl` gets the token, not the installer.
+
+> [!TIP]
+> `repository not found` on a repo that exists usually means a missing or invalid token: private repos are hidden without one.
+
 ## Use it
 
 | I want to | Do this, then `git push` |
