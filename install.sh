@@ -355,9 +355,8 @@ summary() {
   printf '%s[kien/stack] Access (apps keep deploying below):%s\n' "${C_G}" "${C_0}"
   out=$(access_box "$(enabled_components)" "$d")
   printf '%s\n' "$out" | tee "$ROOT/kstack-access.txt"
-  printf '%s  (saved to %s/kstack-access.txt, no password inside)%s\n' "${C_D}" "${ROOT}" "${C_0}"
-  echo "  Change anything: edit cluster.yaml or helm/*/<component>/values.yaml in $(repo), push."
-  [ "$(cfg .global.tls.issuer)" = selfsigned ] && printf '%s  (self-signed certificates: CA in cert-manager/selfsigned-ca)%s\n' "${C_D}" "${C_0}"
+  printf '%s  Saved to kstack-access.txt (no passwords)%s\n' "${C_D}" "${C_0}"
+  [ -n "${KSTACK_DEMO:-}" ] || echo "  To change anything: edit cluster.yaml or helm/, then git push"
   return 0
 }
 

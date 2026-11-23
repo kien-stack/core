@@ -100,11 +100,8 @@ D="$dom" V="$REF" EL="$(yq -o=json -I=0 '.spec.generators[0].list.elements' argo
 KSTACK_DEMO=1 bash install.sh install
 cat <<TXT
 
-  This is a demo: it tracks the public release $REF, self-signed certs, no customisation.
-  minikube/kind: run 'minikube tunnel' if the URLs above do not answer.
-
-  Real install (your domain, Let's Encrypt, your own GitOps repo):
-    curl -fsSL https://raw.githubusercontent.com/kien-stack/essential/main/scripts/install.sh | bash
-  AI Platform, Pro (SSO, backups, rollouts): https://shop.kien.cc
-  Remove: curl -fsSL https://raw.githubusercontent.com/kien-stack/essential/main/scripts/try.sh | bash -s uninstall
+  Demo: self-signed certs, no customisation. URLs down on minikube? run: minikube tunnel
+  Real install:  curl -fsSL https://raw.githubusercontent.com/kien-stack/essential/main/scripts/install.sh | bash
+  Remove:        curl -fsSL https://raw.githubusercontent.com/kien-stack/essential/main/scripts/try.sh | bash -s uninstall
+  More packs:    https://shop.kien.cc
 TXT
