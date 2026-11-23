@@ -369,12 +369,15 @@ wait_apps() {
 # access_box "<comps>" <domain>: URL + login of every enabled component with a UI whose secret exists.
 # Passwords are never printed: only the command that reads them. Plain text (saved to kstack-access.txt).
 access_box() {
-  local comps=$1 d=$2 c n=0; c=$(self_cmd)
+  local comps=$1 d=$2 n=0
   has() { kubectl -n "$1" get secret "$2" >/dev/null 2>&1; }   # only show logins that already work
-  row() { printf ' %-10s %s\n %-10s %s\n' "$1" "https://$2.$d" "" "$3"; n=$((n + 1)); }
-  if has argocd argocd-initial-admin-secret; then row ArgoCD argocd "user admin · password: $c password argocd"; fi
-  if grep -qx infisical <<<"$comps" && has infisical infisical-admin; then row Infisical infisical "user: $c password infisical"; fi
-  if grep -qx monitoring <<<"$comps" && has monitoring grafana-admin; then row Grafana grafana "user admin · password: $c password grafana"; fi
+  sec() { printf "kubectl -n %s get secret %s -o jsonpath='{.data.%s}' | base64 -d" "$1" "$2" "$3"; }
+  row() { printf ' %-10s %s\n' "$1" "https://$2.$d"; printf ' %-10s %-9s %s\n' "" "user" "$3" "" "password" "$4"; n=$((n + 1)); }
+  if has argocd argocd-initial-admin-secret; then row ArgoCD argocd admin "$(sec argocd argocd-initial-admin-secret password)"; fi
+  if grep -qx infisical <<<"$comps" && has infisical infisical-admin; then
+    row Infisical infisical "$(sec infisical infisical-admin email)" "$(sec infisical infisical-admin password)"; fi
+  if grep -qx monitoring <<<"$comps" && has monitoring grafana-admin; then
+    row Grafana grafana admin "$(sec monitoring grafana-admin admin-password)"; fi
   [ "$n" -gt 0 ] || echo " No login ready yet: kubectl -n argocd get applications"
   return 0
 }
