@@ -1,5 +1,7 @@
 # FAQ
 
+Short answers to the common questions. Run `./install.sh doctor` first when in doubt.
+
 ## What do I need?
 
 **1. A Kubernetes cluster** (>= 1.29) and a kubeconfig with *cluster-admin* rights.
@@ -70,11 +72,20 @@ kubectl -n argocd port-forward svc/argocd-server 8080:443   # https://localhost:
 
 ## Cilium (optional)
 
-Remove the `helm/platform/cilium` exclude in `argocd/applications/platform/appset.yaml` and uncomment
-`cilium:` in `cluster.yaml` (`k8sServiceHost` = API server IP): `install.sh` installs Cilium first (eBPF CNI,
-replaces kube-proxy, L2 load balancer IPs via `ciliumLB` in `cluster.yaml`, no MetalLB needed).
+eBPF CNI: replaces kube-proxy and gives L2 load balancer IPs (no MetalLB needed).
+
 Only for a cluster created **without** a CNI nor kube-proxy, e.g. k3s:
-`--flannel-backend=none --disable-network-policy --disable-kube-proxy --disable servicelb`.
+
+```bash
+--flannel-backend=none --disable-network-policy --disable-kube-proxy --disable servicelb
+```
+
+To enable it:
+
+- remove the `helm/platform/cilium` exclude in `argocd/applications/platform/appset.yaml`
+- uncomment `cilium:` in `cluster.yaml` (`k8sServiceHost` = API server IP; LB IPs via `ciliumLB`)
+- run `install.sh`: it installs Cilium first
+
 `install.sh doctor` refuses Cilium if a CNI is already running.
 
 ## How do I remove everything?
