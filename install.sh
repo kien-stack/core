@@ -11,6 +11,11 @@
 #   GIT_USERNAME / GIT_TOKEN          private GitOps repo (HTTPS)
 #   DNS01_API_TOKEN                   if global.tls.issuer=letsencrypt-dns01
 #   EXTERNAL_DNS_API_TOKEN            if the external-dns brick is enabled
+# Output: one line per step, the full log in ./kstack-install.log.
+#   --verbose / KSTACK_VERBOSE=1      raw logs on the terminal (old style), also written to the log file
+#   KSTACK_LOG=<file>                 log file (default: kstack-install.log next to install.sh)
+#   NO_COLOR=1 (or TERM=dumb, no TTY) plain text: no colors, no spinner; "- step ..." then "✔ step (1.2s)" / "✖ step"
+#   KSTACK_UI_FAIL_STEP=<text>        debug: the step whose name contains <text> fails on purpose
 set -euo pipefail
 
 ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
@@ -18,21 +23,152 @@ CONFIG="$ROOT/cluster.yaml"
 APP="$ROOT/argocd/app-of-apps.yaml"
 APPSET="$ROOT/argocd/applications/platform/appset.yaml"
 PACK=essential
+PACK_NAME=Essential
 CMD=install
 ARGOCD_TIMEOUT=${ARGOCD_TIMEOUT:-0}   # seconds to wait for the apps, 0 = until ready
 
-log()  { printf '\033[1;34m[kien/stack]\033[0m %s\n' "$*"; }
-ok()   { printf '  \033[32mOK\033[0m   %s\n' "$*"; }
-warn() { printf '  \033[33mWARN\033[0m %s\n' "$*"; }
-ko()   { printf '  \033[31mKO\033[0m   %s\n' "$*"; }
-die()  { printf '\033[31m[kien/stack] ERROR:\033[0m %s\n' "$*" >&2; exit 1; }
+# ---------------------------------------------------------------- ui (byte-identical in essential, ai, full)
+# fancy: TTY, colors, one spinner line per step. plain: no TTY / TERM=dumb / NO_COLOR, no ANSI, no \r,
+# one line per event. verbose (--verbose, KSTACK_VERBOSE=1): the raw logs, as before.
+# Inside a step, stdout/stderr go to $UI_LOG in the old text format; warnings are also shown under the step.
+UI_MODE=fancy UI_LOG=${KSTACK_LOG:-$ROOT/kstack-install.log} UI_LOGOK="" UI_STEP="" UI_SPIN="" UI_LINE="" UI_T0=$SECONDS
+UI_STEP_T=0 UI_STEP_L=0
+UI_WARNS=()
+exec 7>&1 8>&2   # the terminal, whatever a step redirects
+ui_setup() {
+  local e=$'\033'
+  if [ -n "${KSTACK_VERBOSE:-}" ] && [ "$KSTACK_VERBOSE" != 0 ]; then UI_MODE=verbose
+  elif [ ! -t 1 ] || [ "${TERM:-dumb}" = dumb ] || [ -n "${NO_COLOR+x}" ]; then UI_MODE=plain
+  else UI_MODE=fancy; fi
+  if [ ! -t 1 ] || [ "${TERM:-dumb}" = dumb ] || [ -n "${NO_COLOR+x}" ]; then
+    C_B="" C_D="" C_R="" C_G="" C_Y="" C_C="" C_BL="" C_0=""
+  else C_B="${e}[1m" C_D="${e}[2m" C_R="${e}[31m" C_G="${e}[32m" C_Y="${e}[33m" C_C="${e}[36m" C_BL="${e}[1;34m" C_0="${e}[0m"; fi
+  # old-style lines: colored on the terminal in verbose mode, plain text in the log file
+  if [ "$UI_MODE" = verbose ]; then R_R=$C_R R_G=$C_G R_Y=$C_Y R_BL=$C_BL R_0=$C_0; else R_R="" R_G="" R_Y="" R_BL="" R_0=""; fi
+}
+ui_setup
+ui_raw()   { [ "$UI_MODE" = verbose ] || [ -n "$UI_STEP" ]; }
+ui_tolog() { [ -z "$UI_LOGOK" ] || printf '%s\n' "$*" >>"$UI_LOG"; }
+log()  { if ui_raw; then printf '%s[kien/stack]%s %s\n' "$R_BL" "$R_0" "$*"; else ui_tolog "[kien/stack] $*"; printf '%s%s%s\n' "$C_B" "$*" "$C_0" >&7; fi; }
+ok()   { if ui_raw; then printf '  %sOK%s   %s\n' "$R_G" "$R_0" "$*"; else ui_tolog "  OK   $*"; printf '  %s✔%s %s\n' "$C_G" "$C_0" "$*" >&7; fi; }
+warn() {
+  if [ -n "$UI_STEP" ]; then UI_WARNS+=("$*"); fi
+  if ui_raw; then printf '  %sWARN%s %s\n' "$R_Y" "$R_0" "$*"; else ui_tolog "  WARN $*"; printf '  %s⚠ %s%s\n' "$C_Y" "$*" "$C_0" >&7; fi
+}
+ko()   { if ui_raw; then printf '  %sKO%s   %s\n' "$R_R" "$R_0" "$*"; else ui_tolog "  KO   $*"; printf '  %s✖%s %s\n' "$C_R" "$C_0" "$*" >&7; fi; }
+die()  {
+  if ui_raw; then printf '%s[kien/stack] ERROR:%s %s\n' "$R_R" "$R_0" "$*" >&2
+  else ui_tolog "[kien/stack] ERROR: $*"; printf '%s✖ %s%s\n' "$C_R" "$*" "$C_0" >&8; fi
+  exit 1
+}
+ui_now()  { if [ -n "${EPOCHREALTIME:-}" ]; then printf '%s\n' "${EPOCHREALTIME/,/.}"; else date +%s; fi; }
+ui_secs() { awk -v a="$1" -v b="$(ui_now)" 'BEGIN { printf "%.1f", b - a }'; }
+ui_mmss() { if [ "$1" -lt 60 ]; then printf '%ds' "$1"; else printf '%dm%02ds' $(( $1 / 60 )) $(( $1 % 60 )); fi; }
+ui_cols() {
+  local c=${COLUMNS:-}; [ -n "$c" ] || c=$(tput cols 2>/dev/null || true)
+  case "$c" in ''|*[!0-9]*) c=80 ;; esac; printf '%s\n' "$c"
+}
+ui_version() {
+  local v=""
+  [ ! -f "$ROOT/.release-please-manifest.json" ] || v=$(sed -n 's/.*"\.": *"\([^"]*\)".*/\1/p' "$ROOT/.release-please-manifest.json" | head -1)
+  [ -n "$v" ] || [ ! -f "$ROOT/CHANGELOG.md" ] || v=$(awk '/^## /{ s=$2; sub(/^\[/, "", s); sub(/\].*/, "", s); sub(/^v/, "", s); print s; exit }' "$ROOT/CHANGELOG.md")
+  printf '%s\n' "${v:-dev}"
+}
+# ui_init: after the arguments (--verbose). Truncates the log, prints the header, sets the traps.
+ui_init() {
+  ui_setup
+  if { : >"$UI_LOG"; } 2>/dev/null; then UI_LOGOK=1
+  else UI_LOG="${TMPDIR:-/tmp}/kstack-install.$$.log"; : >"$UI_LOG"; UI_LOGOK=1; fi
+  local ver ctx; ver=$(ui_version); ctx=$(kubectl config current-context 2>/dev/null || true)
+  printf '%skien/stack %s%s %sv%s%s\n' "$C_B" "${PACK_NAME:-$PACK}" "$C_0" "$C_D" "$ver" "$C_0"
+  printf '%sContext: %s   Log: %s%s\n\n' "$C_D" "${ctx:-none}" "$UI_LOG" "$C_0"
+  printf 'kien/stack %s v%s, context %s, %s\n' "${PACK_NAME:-$PACK}" "$ver" "${ctx:-none}" "$(date)" >>"$UI_LOG"
+  if [ "$UI_MODE" = verbose ]; then exec > >(tee -a "$UI_LOG") 2> >(tee -a "$UI_LOG" >&8); fi
+  trap ui_exit EXIT
+  trap 'exit 130' INT
+  trap 'exit 143' TERM
+}
+ui_exit() {
+  local rc=$?
+  ui_spin_stop
+  if [ "$UI_MODE" = verbose ]; then return "$rc"; fi
+  if [ -n "$UI_LINE" ]; then printf '\n' >&7; UI_LINE=""; fi
+  if [ -n "$UI_STEP" ]; then ui_step_end "$rc"; fi
+  if [ "$UI_MODE" = fancy ]; then printf '\033[?25h' >&7; fi
+  if [ "$rc" -ne 0 ]; then printf '%sLog: %s%s\n' "$C_D" "$UI_LOG" "$C_0" >&8; fi
+  return "$rc"
+}
+ui_spinner() {  # background: redraws "<frame> <name> (<s>)" until killed
+  local i=0 s=$SECONDS
+  local -a f=(⠋ ⠙ ⠹ ⠸ ⠼ ⠴ ⠦ ⠧ ⠇ ⠏)
+  printf '\033[?25l'
+  while :; do
+    printf '\r%s%s%s %s %s(%ds)%s\033[K' "$C_C" "${f[i % 10]}" "$C_0" "$1" "$C_D" $(( SECONDS - s )) "$C_0"
+    i=$(( i + 1 )); sleep 0.1
+  done
+}
+ui_spin_stop() {
+  if [ -z "$UI_SPIN" ]; then return 0; fi
+  kill "$UI_SPIN" 2>/dev/null || true; wait "$UI_SPIN" 2>/dev/null || true; UI_SPIN=""
+  printf '\r\033[K\033[?25h' >&7
+}
+ui_fake_fail() { echo "KSTACK_UI_FAIL_STEP=$KSTACK_UI_FAIL_STEP: simulated failure"; echo "doing things..."; echo "Error: fake error"; return 1; }
+# step "<name>" cmd args...: runs cmd in this shell (variables it sets stay), output to $UI_LOG.
+# Same exit behaviour as calling cmd directly (set -e applies as usual; the EXIT trap shows the failure).
+step() {
+  local name=$1; shift
+  if [ -n "${KSTACK_UI_FAIL_STEP:-}" ]; then case "$name" in *"$KSTACK_UI_FAIL_STEP"*) set -- ui_fake_fail ;; esac; fi
+  if [ "$UI_MODE" = verbose ]; then log "$name"; "$@"; return; fi
+  UI_WARNS=(); UI_STEP_T=$(ui_now); UI_STEP_L=$(wc -l <"$UI_LOG"); UI_STEP=$name
+  printf '\n== %s\n' "$name" >>"$UI_LOG"
+  if [ "$UI_MODE" = fancy ]; then ui_spinner "$name" >&7 2>/dev/null & UI_SPIN=$!
+  else printf -- '- %s ...\n' "$name" >&7; fi
+  "$@" >>"$UI_LOG" 2>&1
+  local rc=$?
+  ui_step_end "$rc"
+  return "$rc"
+}
+ui_step_end() {
+  local rc=$1 name=$UI_STEP t w
+  ui_spin_stop; UI_STEP=""
+  t=$(ui_secs "$UI_STEP_T")
+  if [ "$rc" -eq 0 ]; then printf '%s✔%s %s %s(%ss)%s\n' "$C_G" "$C_0" "$name" "$C_D" "$t" "$C_0" >&7
+  else printf '%s✖ %s%s %s(%ss)%s\n' "$C_R" "$name" "$C_0" "$C_D" "$t" "$C_0" >&7; fi
+  for w in ${UI_WARNS[@]+"${UI_WARNS[@]}"}; do printf '  %s⚠ %s%s\n' "$C_Y" "$w" "$C_0" >&7; done
+  UI_WARNS=()
+  if [ "$rc" -ne 0 ]; then
+    tail -n +"$(( UI_STEP_L + 3 ))" "$UI_LOG" | tail -n 20 | while IFS= read -r w; do printf '    %s%s%s\n' "$C_D" "$w" "$C_0"; done >&7
+  fi
+}
+# ui_apps <frame> <ready> <total> <elapsed s> <pending names> <degraded names>: the wait_apps line (fancy)
+ui_apps() {
+  local fr=$1 r=$2 n=$3 el=$4 pend=$5 bad=" $6 " bar="" i f p room a
+  f=10; if [ "$n" -gt 0 ]; then f=$(( r * 10 / n )); fi
+  for (( i = 0; i < 10; i++ )); do if [ "$i" -lt "$f" ]; then bar+="█"; else bar+="░"; fi; done
+  p="x Syncing apps [0123456789] $r/$n  ($(ui_mmss "$el"))  "
+  room=$(( UI_COLS - ${#p} - 1 ))
+  printf '\r%s%s%s Syncing apps [%s] %s/%s  %s(%s)%s ' "$C_C" "$fr" "$C_0" "$bar" "$r" "$n" "$C_D" "$(ui_mmss "$el")" "$C_0" >&7
+  for a in $pend; do
+    if [ $(( ${#a} + 1 )) -gt "$room" ]; then printf '%s…%s' "$C_D" "$C_0" >&7; break; fi
+    case "$bad" in *" $a "*) printf ' %s%s%s' "$C_Y" "$a" "$C_0" >&7 ;; *) printf ' %s%s%s' "$C_D" "$a" "$C_0" >&7 ;; esac
+    room=$(( room - ${#a} - 1 ))
+  done
+  printf '\033[K' >&7; UI_LINE=1
+}
+UI_COLS=80
+ui_done() {
+  ui_tolog "Done in $(ui_mmss $(( SECONDS - UI_T0 )))"
+  printf '\n%s%sDone in %s%s\n' "$C_B" "$C_G" "$(ui_mmss $(( SECONDS - UI_T0 )))" "$C_0" >&7
+}
+# ---------------------------------------------------------------- end ui
 
-usage() { sed -n '2,13p' "$0" | sed 's/^# \{0,1\}//'; }
+usage() { sed -n '2,18p' "$0" | sed 's/^# \{0,1\}//'; }
 
 while [ $# -gt 0 ]; do
   case "$1" in
     doctor|install) CMD=$1 ;;
     --pack) [ "${2:-}" = "$PACK" ] || die "this repo installs the $PACK pack"; shift ;;
+    --verbose) KSTACK_VERBOSE=1 ;;
     -h|--help) usage; exit 0 ;;
     *) usage; die "unknown argument: $1" ;;
   esac
@@ -224,33 +360,25 @@ internal_dns() {
   ok "CoreDNS: *.$d -> Traefik inside the cluster (KSTACK_INTERNAL_DNS=0 to skip)"
 }
 
-install() {
-  local comps; comps=$(enabled_components)
-  log "Pack $PACK -> ArgoCD will deploy: $(tr '\n' ' ' <<<"$comps")"
-  doctor || die "doctor failed: fix the prerequisites above"
+install_cilium() {
+  log "Installing Cilium (CNI, before everything else; then managed by ArgoCD)"
+  # LB pool / L2 policy CRDs only exist once the Cilium operator runs: ArgoCD adds them right after.
+  helm_bootstrap cilium kube-system --set ciliumLB.enabled=false
+  kubectl wait --for=condition=Ready nodes --all --timeout=5m >/dev/null
+  ok "Cilium ready, nodes Ready"
+}
 
-  bootstrap_secrets "$comps"
-  internal_dns
-
-  if grep -qx cilium <<<"$comps"; then
-    log "Installing Cilium (CNI, before everything else; then managed by ArgoCD)"
-    # LB pool / L2 policy CRDs only exist once the Cilium operator runs: ArgoCD adds them right after.
-    helm_bootstrap cilium kube-system --set ciliumLB.enabled=false
-    kubectl wait --for=condition=Ready nodes --all --timeout=5m >/dev/null
-    ok "Cilium ready, nodes Ready"
-  fi
-
+install_argocd() {
   log "Installing ArgoCD (Helm, then self-managed by ArgoCD)"
   # The HTTPRoute needs the Gateway API CRDs, installed later by the traefik brick:
   # ArgoCD creates it when it takes itself over
   helm_bootstrap argocd argocd --set argo-cd.server.httproute.enabled=false
   ok "ArgoCD ready"
-  local pw; pw=$(kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath='{.data.password}' 2>/dev/null | base64 -d 2>/dev/null || true)
-  log "ArgoCD login: admin / ${pw:-<see argocd-initial-admin-secret>}"
-  log "  UI now (no ingress needed): kubectl -n argocd port-forward svc/argocd-server 8080:443  ->  https://localhost:8080"
+  ARGOCD_PW=$(kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath='{.data.password}' 2>/dev/null | base64 -d 2>/dev/null || true)
+}
 
-  if [ -n "${GIT_TOKEN:-}" ]; then
-    kubectl -n argocd apply -f - >/dev/null <<YAML
+repo_credential() {
+  kubectl -n argocd apply -f - >/dev/null <<YAML
 apiVersion: v1
 kind: Secret
 metadata:
@@ -263,18 +391,97 @@ stringData:
   username: ${GIT_USERNAME:-git}
   password: ${GIT_TOKEN}
 YAML
-    ok "GitOps repo credential registered in ArgoCD"
-  fi
+  ok "GitOps repo credential registered in ArgoCD"
+}
 
+apply_app_of_apps() {
   log "kubectl apply -f argocd/app-of-apps.yaml (as committed in Git)"
   kubectl apply -f "$APP" >/dev/null
   ok "ArgoCD now syncs from $(repo) ($(rev)): push to change the platform"
+}
+
+install() {
+  local comps; comps=$(enabled_components)
+  log "Pack $PACK -> ArgoCD will deploy: $(tr '\n' ' ' <<<"$comps")"
+  step "Prerequisites (doctor)" doctor || die "doctor failed: fix the prerequisites above"
+
+  step "Bootstrap secrets" bootstrap_secrets "$comps"
+  step "Internal DNS" internal_dns
+
+  if grep -qx cilium <<<"$comps"; then step "Cilium" install_cilium; fi
+
+  ARGOCD_PW=""
+  step "ArgoCD (Helm install)" install_argocd
+  log "ArgoCD login: admin / ${ARGOCD_PW:-<see argocd-initial-admin-secret>}"
+  log "  UI now (no ingress needed): kubectl -n argocd port-forward svc/argocd-server 8080:443  ->  https://localhost:8080"
+
+  if [ -n "${GIT_TOKEN:-}" ]; then step "Git repo credential" repo_credential; fi
+
+  step "App of apps" apply_app_of_apps
 
   wait_apps "$comps"
+  ui_done
   summary
 }
 
 wait_apps() {
+  # ArgoCD deploys every app in parallel; this shows the progress until all are ready (no time limit by
+  # default, ARGOCD_TIMEOUT=<seconds> to cap it). Ctrl+C is safe: ArgoCD keeps deploying.
+  # Terminal: one line redrawn in place. Plain: one line when the ready count changes. Verbose: the table.
+  if [ "$UI_MODE" = verbose ]; then wait_apps_table "$@"; return; fi
+  local comps=$1 timeout=${ARGOCD_TIMEOUT%s} apps a n=0 start=$SECONDS
+  apps="app-of-apps $comps"
+  for a in $apps; do n=$((n + 1)); done
+  ui_tolog "[kien/stack] Deploying $n apps with ArgoCD (Ctrl+C is safe: ArgoCD keeps going)"
+  UI_COLS=$(ui_cols)
+  local rc=0 el=0 j i=0 st data ready pend bad lastr=-1
+  local -a last=() fr=(⠋ ⠙ ⠹ ⠸ ⠼ ⠴ ⠦ ⠧ ⠇ ⠏)
+  if [ "$UI_MODE" = fancy ]; then printf '\033[?25l' >&7; else printf -- '- Syncing apps ...\n' >&7; fi
+  while :; do
+    data=$'\n'$(kubectl -n argocd get applications -o jsonpath='{range .items[*]}{.metadata.name}={.status.sync.status}/{.status.health.status}{"\n"}{end}' 2>/dev/null || true)
+    el=$(( SECONDS - start )); ready=0; pend=""; bad=""; j=0
+    for a in $apps; do
+      j=$((j + 1)); st=""
+      if [[ "$data" == *$'\n'"$a="* ]]; then st=${data#*$'\n'"$a="}; st=${st%%$'\n'*}; fi
+      if [ "${last[j]-unset}" != "$st" ]; then ui_tolog "  $a ${st:-Pending} ($(ui_mmss "$el"))"; last[j]=$st; fi
+      case "$st" in
+        Synced/Healthy) ready=$((ready + 1)) ;;
+        */Degraded)     pend+=" $a"; bad+=" $a" ;;
+        *)              pend+=" $a" ;;
+      esac
+    done
+    if [ "$UI_MODE" = fancy ]; then ui_apps "${fr[i % 10]}" "$ready" "$n" "$el" "$pend" "$bad"
+    elif [ "$ready" -ne "$lastr" ]; then printf 'Syncing apps %d/%d\n' "$ready" "$n" >&7; lastr=$ready; fi
+    if [ "$ready" -eq "$n" ]; then break; fi
+    if [ "${timeout:-0}" -gt 0 ] && [ "$el" -ge "$timeout" ]; then rc=1; break; fi
+    if [ "$UI_MODE" = fancy ]; then
+      for _ in 1 2 3 4 5 6 7 8 9 10; do
+        sleep 0.2; i=$((i + 1)); ui_apps "${fr[i % 10]}" "$ready" "$n" $(( SECONDS - start )) "$pend" "$bad"
+      done
+    else sleep 2; fi
+  done
+  if [ "$UI_MODE" = fancy ]; then printf '\r\033[K\033[?25h' >&7; UI_LINE=""; fi
+  if [ "$rc" -eq 0 ]; then
+    ui_tolog "  OK   all $n apps are ready ($(( el / 60 )) min $(( el % 60 )) s)"
+    printf '%s✔%s Synced %d/%d apps %s(%s)%s\n' "$C_G" "$C_0" "$n" "$n" "$C_D" "$(ui_mmss "$el")" "$C_0" >&7
+    return 0
+  fi
+  printf '%s✖ Synced %d/%d apps%s %s(%s)%s\n' "$C_R" "$ready" "$n" "$C_0" "$C_D" "$(ui_mmss "$el")" "$C_0" >&7
+  [ -z "$bad" ] || printf '  %sDegraded:%s%s\n' "$C_Y" "$bad" "$C_0" >&7
+  [ -z "$pend" ] || printf '  %sNot ready:%s%s\n' "$C_D" "$pend" "$C_0" >&7
+  wait_apps_timeout
+}
+
+wait_apps_timeout() {
+  warn "still not ready after ${ARGOCD_TIMEOUT%s}s (ArgoCD keeps deploying: kubectl -n argocd get applications)"
+  if [ -z "$(kubectl -n traefik get svc traefik -o jsonpath='{.status.loadBalancer.ingress}' 2>/dev/null)" ] \
+     && [ "$(kubectl -n traefik get svc traefik -o jsonpath='{.spec.type}' 2>/dev/null)" = LoadBalancer ]; then
+    warn "Traefik has no load balancer IP: minikube -> 'minikube tunnel'; homelab -> Cilium L2 (ciliumLB) or NodePort"
+  fi
+  return 1
+}
+
+wait_apps_table() {  # --verbose: the original per-app table
   # ArgoCD deploys every app in parallel; this shows each app's status until all are ready (no time limit by
   # default, ARGOCD_TIMEOUT=<seconds> to cap it). Ctrl+C is safe: ArgoCD keeps deploying.
   # Terminal: one line per app, redrawn in place only when a status changes. CI/pipe: one line per change.
@@ -313,12 +520,7 @@ wait_apps() {
     sleep 2
   done
   if [ "$rc" -eq 0 ]; then ok "all $n apps are ready ($(( el / 60 )) min $(( el % 60 )) s)"; return 0; fi
-  warn "still not ready after ${timeout}s (ArgoCD keeps deploying: kubectl -n argocd get applications)"
-  if [ -z "$(kubectl -n traefik get svc traefik -o jsonpath='{.status.loadBalancer.ingress}' 2>/dev/null)" ] \
-     && [ "$(kubectl -n traefik get svc traefik -o jsonpath='{.spec.type}' 2>/dev/null)" = LoadBalancer ]; then
-    warn "Traefik has no load balancer IP: minikube -> 'minikube tunnel'; homelab -> Cilium L2 (ciliumLB) or NodePort"
-  fi
-  return 1
+  wait_apps_timeout
 }
 
 # access_box "<comps>" <domain>: URL / user / password of every enabled brick with a UI (charts in helm/).
@@ -351,6 +553,7 @@ summary() {
 }
 
 command -v yq >/dev/null 2>&1 || die "yq (mikefarah, v4) is required"
+ui_init
 case "$CMD" in
   doctor) doctor ;;
   install) install ;;

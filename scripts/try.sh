@@ -4,13 +4,18 @@
 #   curl -fsSL https://raw.githubusercontent.com/kien-stack/essential/main/scripts/try.sh | bash -s uninstall
 # Uses the public repo on main (ArgoCD follows main; pin a release with KSTACK_REF=vX.Y.Z),
 # <node-ip>.sslip.io and self-signed certs. For real use: https://raw.githubusercontent.com/kien-stack/essential/main/scripts/install.sh
-# Overrides: KSTACK_IP, KSTACK_REF. Requires kubectl, helm, git (yq is fetched if missing).
+# Overrides: KSTACK_IP, KSTACK_REF. Output: --verbose / KSTACK_VERBOSE=1 (raw logs), KSTACK_LOG, NO_COLOR. Requires kubectl, helm, git (yq is fetched if missing).
 set -euo pipefail
 REPO=${KSTACK_SOURCE:-https://github.com/kien-stack/essential}
 REF=${KSTACK_REF:-main}
 DIR=${KSTACK_DIR:-$HOME/kien-stack-try}
-log() { printf '\033[1;35m[kien/stack]\033[0m %s\n' "$*"; }
-die() { printf '\033[31merror:\033[0m %s\n' "$*" >&2; exit 1; }
+# Colors only on a terminal without NO_COLOR/TERM=dumb. --verbose or KSTACK_VERBOSE=1: raw logs from ./install.sh.
+if [ -t 1 ] && [ "${TERM:-dumb}" != dumb ] && [ -z "${NO_COLOR+x}" ]; then C_M=$'\033[1;35m' C_R=$'\033[31m' C_0=$'\033[0m'; else C_M="" C_R="" C_0=""; fi
+log() { printf '%s[kien/stack]%s %s\n' "$C_M" "$C_0" "$*"; }
+die() { printf '%serror:%s %s\n' "$C_R" "$C_0" "$*" >&2; exit 1; }
+ARG=""
+for a in "$@"; do case "$a" in --verbose) export KSTACK_VERBOSE=1 ;; *) ARG=${ARG:-$a} ;; esac; done
+set -- ${ARG:+"$ARG"}
 ask() { # ask VAR "question" default
   local v=${!1:-}; if [ -n "$v" ] || [ -n "${KSTACK_YES:-}" ] || [ ! -r /dev/tty ]; then printf -v "$1" %s "${v:-$3}"; return; fi
   read -r -p "  $2 [${3:-none}]: " v </dev/tty || true; printf -v "$1" %s "${v:-$3}"
@@ -92,7 +97,7 @@ D="$dom" V="$REF" EL="$(yq -o=json -I=0 '.spec.generators[0].list.elements' argo
     {"target": {"kind": "ApplicationSet", "name": "platform"}, "patch": ([
       {"op": "replace", "path": "/spec/generators/0/list/elements", "value": (strenv(EL) | from_json)}] | to_json)}]' argocd/app-of-apps.yaml
 
-KSTACK_DEMO=1 bash install.sh install
+KSTACK_DEMO=1 bash install.sh install  # KSTACK_VERBOSE (exported by --verbose) is read by install.sh
 cat <<TXT
 
   This is a demo: it tracks the public release $REF, self-signed certs, no customisation.

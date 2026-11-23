@@ -9,12 +9,17 @@
 #   3. runs ./install.sh from your fork: secrets, ArgoCD, kubectl apply argocd/app-of-apps.yaml
 # Then ArgoCD applies whatever you push. Change a setting later: edit cluster.yaml, push.
 # Non-interactive: KSTACK_REPO, KSTACK_BRANCH, KSTACK_DOMAIN, KSTACK_EMAIL, KSTACK_IP, KSTACK_CILIUM,
-# KSTACK_YES=1; GIT_USERNAME/GIT_TOKEN for a private repo. Requires kubectl, helm, git.
+# KSTACK_YES=1; GIT_USERNAME/GIT_TOKEN for a private repo. Output: --verbose / KSTACK_VERBOSE=1, KSTACK_LOG, NO_COLOR. Requires kubectl, helm, git.
 set -euo pipefail
 UPSTREAM=https://github.com/kien-stack/essential
 DIR=${KSTACK_DIR:-$HOME/kien-stack}
-log() { printf '\033[1;35m[kien/stack]\033[0m %s\n' "$*"; }
-die() { printf '\033[31merror:\033[0m %s\n' "$*" >&2; exit 1; }
+# Colors only on a terminal without NO_COLOR/TERM=dumb. --verbose or KSTACK_VERBOSE=1: raw logs from ./install.sh.
+if [ -t 1 ] && [ "${TERM:-dumb}" != dumb ] && [ -z "${NO_COLOR+x}" ]; then C_M=$'\033[1;35m' C_R=$'\033[31m' C_0=$'\033[0m'; else C_M="" C_R="" C_0=""; fi
+log() { printf '%s[kien/stack]%s %s\n' "$C_M" "$C_0" "$*"; }
+die() { printf '%serror:%s %s\n' "$C_R" "$C_0" "$*" >&2; exit 1; }
+ARG=""
+for a in "$@"; do case "$a" in --verbose) export KSTACK_VERBOSE=1 ;; *) ARG=${ARG:-$a} ;; esac; done
+set -- ${ARG:+"$ARG"}
 ask() { # ask VAR "question" default
   local v=${!1:-}; if [ -n "$v" ] || [ -n "${KSTACK_YES:-}" ] || [ ! -r /dev/tty ]; then printf -v "$1" %s "${v:-$3}"; return; fi
   read -r -p "  $2 [${3:-none}]: " v </dev/tty || true; printf -v "$1" %s "${v:-$3}"
@@ -108,7 +113,7 @@ else
   log "pushed: $(git log -1 --format='%h %s')"
 fi
 
-bash install.sh install
+bash install.sh install  # KSTACK_VERBOSE (exported by --verbose) is read by install.sh
 cat <<TXT
 
   Your fork: $SRC (cluster.yaml = your settings). Edit, commit, push: ArgoCD applies it.

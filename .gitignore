@@ -3,3 +3,4 @@
 helm/**/charts/
 helm/**/Chart.lock
 kstack-access.txt
+kstack-install.log
