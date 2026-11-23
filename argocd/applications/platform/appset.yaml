@@ -46,7 +46,7 @@ spec:
           # Prometheus + Grafana (https://grafana.<domain>) + VictoriaMetrics + VictoriaLogs
           - app: monitoring
             namespace: monitoring
-            stage: "4"
+            stage: "3"
           # Off by default: uncomment to enable
           # - app: cilium
           #   namespace: kube-system
@@ -67,17 +67,16 @@ spec:
         # 2: operators and storage
         - matchExpressions:
             - {key: stage, operator: In, values: ["2"]}
-        # 3: secrets (external-secrets + infisical: they need each other, so same stage)
+        # 3: secrets and monitoring, together: external-secrets stores need Infisical, Infisical's
+        #    PodMonitor needs the monitoring CRDs, monitoring's secrets need external-secrets
+        #    (also any brick without a known stage)
         - matchExpressions:
-            - {key: stage, operator: In, values: ["3"]}
-        # 4: monitoring and anything else
-        - matchExpressions:
-            - {key: stage, operator: NotIn, values: ["1", "2", "3"]}
+            - {key: stage, operator: NotIn, values: ["1", "2"]}
   template:
     metadata:
       name: "{{ .app }}"
       labels:
-        stage: "{{ .stage }}"
+        stage: '{{ index . "stage" | default "3" }}'
       finalizers:
         - resources-finalizer.argocd.argoproj.io
     spec:
