@@ -277,10 +277,12 @@ YAML
   kubectl apply -f "$APP" >/dev/null
   ok "ArgoCD now syncs from $(repo) ($(rev)): push to change the platform"
 
-  # Logins first: URLs and password commands are known now, the apps can take a while
+  tunnel_hint
+  trap 'echo; log "Stopped waiting (ArgoCD keeps deploying)"; summary; exit 0' INT
+  local rc=0; wait_apps "$comps" || rc=1
+  trap - INT
   summary
-  trap 'echo; log "Stopped waiting (ArgoCD keeps deploying). Logins: $ROOT/kstack-access.txt"; exit 0' INT
-  if wait_apps "$comps"; then trap - INT; ok "Logins above, also in $ROOT/kstack-access.txt"; else trap - INT; return 1; fi
+  return $rc
 }
 
 wait_apps() {
@@ -336,26 +338,36 @@ access_box() {
   local comps=$1 d=$2 l w=0 bar
   local -a L=("kien/stack access ($d)" "")
   sec() { printf "kubectl -n %s get secret %s -o jsonpath='{.data.%s}' | base64 -d" "$1" "$2" "$3"; }
-  L+=("ArgoCD     https://argocd.$d" "  user      admin" "  password  $(sec argocd argocd-initial-admin-secret password)")
-  if grep -qx infisical <<<"$comps"; then
+  has() { kubectl -n "$1" get secret "$2" >/dev/null 2>&1; }   # only show logins that already work
+  if has argocd argocd-initial-admin-secret; then
+    L+=("ArgoCD     https://argocd.$d" "  user      admin" "  password  $(sec argocd argocd-initial-admin-secret password)")
+  fi
+  if grep -qx infisical <<<"$comps" && has infisical infisical-admin; then
     L+=("" "Infisical  https://infisical.$d" "  user      $(sec infisical infisical-admin email)" "  password  $(sec infisical infisical-admin password)")
   fi
-  if grep -qx monitoring <<<"$comps"; then
+  if grep -qx monitoring <<<"$comps" && has monitoring grafana-admin; then
     L+=("" "Grafana    https://grafana.$d" "  user      admin" "  password  $(sec monitoring grafana-admin admin-password)")
   fi
-  printf '%s\n' "${L[0]}"
-  for l in "${L[@]:2}"; do printf '  %s\n' "$l"; done
+  [ "${L[2]:-}" = "" ] && L=("${L[0]}" "" "${L[@]:3}")   # no leading blank line if ArgoCD is missing
+  for l in "${L[@]}"; do [ ${#l} -le $w ] || w=${#l}; done
+  printf -v bar '%*s' $((w + 2)) ''; bar=${bar// /─}
+  printf '┌%s┐\n' "$bar"; printf '│ %-*s │\n' "$w" "${L[0]}"; printf '├%s┤\n' "$bar"
+  for l in "${L[@]:2}"; do printf '│ %-*s │\n' "$w" "$l"; done
+  printf '└%s┘\n' "$bar"
+}
+
+tunnel_hint() {
+  if kubectl get nodes -o jsonpath='{.items[0].metadata.labels}{.items[0].spec.providerID}' 2>/dev/null | grep -qE 'minikube.k8s.io|kind://'; then
+    printf '%s  minikube/kind: run "minikube tunnel" in another terminal, or the URLs will not answer%s\n' "${C_Y}" "${C_0}"
+  fi
 }
 
 summary() {
   local d out; d=$(cfg .global.domain)
-  printf '%s[kien/stack] Access (apps keep deploying below):%s\n' "${C_G}" "${C_0}"
+  printf '%s[kien/stack] Access:%s\n' "${C_G}" "${C_0}"
   out=$(access_box "$(enabled_components)" "$d")
   printf '%s\n' "$out" | tee "$ROOT/kstack-access.txt"
   printf '%s  Saved to kstack-access.txt (no passwords)%s\n' "${C_D}" "${C_0}"
-  if kubectl get nodes -o jsonpath='{.items[0].metadata.labels}{.items[0].spec.providerID}' 2>/dev/null | grep -qE 'minikube.k8s.io|kind://'; then
-    printf '%s  minikube/kind: run "minikube tunnel" in another terminal, or the URLs will not answer%s\n' "${C_Y}" "${C_0}"
-  fi
   [ -n "${KSTACK_DEMO:-}" ] || echo "  To change anything: edit cluster.yaml or helm/, then git push"
   return 0
 }
