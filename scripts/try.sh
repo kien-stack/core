@@ -6,6 +6,7 @@
 # <node-ip>.sslip.io and self-signed certs. For real use: https://raw.githubusercontent.com/kien-stack/essential/main/scripts/install.sh
 # Overrides: KSTACK_IP, KSTACK_REF. Requires kubectl, helm, git (yq is fetched if missing).
 set -euo pipefail
+KSTACK_PWD=$PWD   # where the user runs this: install.sh prints the commands relative to it
 REPO=${KSTACK_SOURCE:-https://github.com/kien-stack/essential}
 REF=${KSTACK_REF:-main}
 DIR=${KSTACK_DIR:-$HOME/kien-stack-try}
@@ -78,7 +79,7 @@ fi
 
 ip=${KSTACK_IP:-$(kubectl get nodes -o jsonpath='{.items[0].status.addresses[?(@.type=="InternalIP")].address}')}
 dom=$ip.sslip.io
-log "demo on context $(kubectl config current-context), https://*.$dom, release $REF"
+[ -z "${KSTACK_VERBOSE:-}" ] || log "demo on context $(kubectl config current-context), https://*.$dom, release $REF"
 # A demo has no fork: ArgoCD reads OUR public repo at $REF (its cluster.yaml says example.com).
 # So, and ONLY in this demo, the root Application pins $REF and overrides global.domain.
 # A real install has none of this: ./install.sh writes your settings into your fork.
@@ -97,14 +98,11 @@ D="$dom" V="$REF" EL="$(yq -o=json -I=0 '.spec.generators[0].list.elements' argo
     {"target": {"kind": "ApplicationSet", "name": "platform"}, "patch": ([
       {"op": "replace", "path": "/spec/generators/0/list/elements", "value": (strenv(EL) | from_json)}] | to_json)}]' argocd/app-of-apps.yaml
 
-KSTACK_DEMO=1 bash install.sh install
-cat <<TXT
-
-  This is a demo: it tracks the public release $REF, self-signed certs, no customisation.
-  minikube/kind: run 'minikube tunnel' if the URLs above do not answer.
-
-  Real install (your domain, Let's Encrypt, your own GitOps repo):
-    curl -fsSL https://raw.githubusercontent.com/kien-stack/essential/main/scripts/install.sh | bash
-  AI Platform, Pro (SSO, backups, rollouts): https://shop.kien.cc
-  Remove: curl -fsSL https://raw.githubusercontent.com/kien-stack/essential/main/scripts/try.sh | bash -s uninstall
-TXT
+KSTACK_DEMO=1 KSTACK_PWD=$KSTACK_PWD bash install.sh install || exit $?
+raw=https://raw.githubusercontent.com/kien-stack/essential/main/scripts
+b=$(printf '%*s' 39 ''); b=${b// /─}
+printf '\n %s─── Next steps %s%s\n' "${C_D}" "$b" "${C_0}"
+printf ' %-16s %s\n' "1. Real install" "curl -fsSL $raw/install.sh | bash" "2. More packs" "https://shop.kien.cc"
+b=$(printf '%*s' 43 ''); b=${b// /─}
+printf '\n %s─── Remove %s%s\n' "${C_D}" "$b" "${C_0}"
+printf ' %s\n' "curl -fsSL $raw/try.sh | bash -s uninstall"

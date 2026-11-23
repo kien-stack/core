@@ -5,6 +5,8 @@
 #   ./install.sh configure   ask the questions again, commit, push, install
 #   ./install.sh doctor      check the cluster and the repo
 #   ./install.sh uninstall   ArgoCD apps, then ArgoCD (keeps namespaces/PVCs)
+#   ./install.sh password argocd|infisical|grafana   print a login (once its app is deployed)
+# KSTACK_VERBOSE=1 shows every step in detail.
 # Everything it uses is in Git, nothing is generated:
 #   cluster.yaml             your settings (domain, TLS...), passed to every chart
 #   argocd/app-of-apps.yaml  the repo/branch ArgoCD follows (same URL in argocd/applications/*/appset.yaml)
@@ -28,19 +30,53 @@ ARGOCD_TIMEOUT=${ARGOCD_TIMEOUT:-0}   # seconds to wait for the apps, 0 = until 
 # colors: only on a TTY, honour NO_COLOR and TERM=dumb (bash 3.2 safe)
 kc() { [ -t "$1" ] && [ -z "${NO_COLOR:-}" ] && [ "${TERM:-dumb}" != dumb ]; }
 # shellcheck disable=SC2034
-if kc 1; then C_H=$'\033[1;36m' C_G=$'\033[32m' C_Y=$'\033[33m' C_R=$'\033[31m' C_D=$'\033[2m' C_0=$'\033[0m'; else C_H='' C_G='' C_Y='' C_R='' C_D='' C_0=''; fi
+if kc 1; then C_H=$'\033[1;36m' C_G=$'\033[32m' C_Y=$'\033[33m' C_R=$'\033[31m' C_D=$'\033[2m' C_B=$'\033[1m' C_0=$'\033[0m'; else C_H='' C_G='' C_Y='' C_R='' C_D='' C_B='' C_0=''; fi
 if kc 2; then E_R=$'\033[1;31m' E_Q=$'\033[1;36m' E_0=$'\033[0m'; else E_R='' E_Q='' E_0=''; fi
-log()  { printf '%s[kien/stack]%s %s\n' "${C_H}" "${C_0}" "$*"; }
-ok()   { printf '  %sOK%s   %s\n' "${C_G}" "${C_0}" "$*"; }
-warn() { printf '  %sWARN%s %s\n' "${C_Y}" "${C_0}" "$*"; }
-ko()   { printf '  %sKO%s   %s\n' "${C_R}" "${C_0}" "$*"; }
-die()  { printf '%s[kien/stack] ERROR:%s %s\n' "${E_R}" "${E_0}" "$*" >&2; exit 1; }
+TTY=""; if [ -t 1 ] && [ "${TERM:-dumb}" != dumb ]; then TTY=1; fi
+# QUIET=1 (install): details only with KSTACK_VERBOSE=1; warnings and errors are always shown
+QUIET="" PEND=""
+verbose() { [ -z "$QUIET" ] || [ -n "${KSTACK_VERBOSE:-}" ]; }
+clr()  { if [ -n "$PEND" ]; then printf '\r\033[K'; PEND=""; fi; }
+log()  { verbose || return 0; clr; printf '%s[kien/stack]%s %s\n' "${C_H}" "${C_0}" "$*"; }
+ok()   { verbose || return 0; clr; printf '  %sOK%s   %s\n' "${C_G}" "${C_0}" "$*"; }
+WARNS=()
+# warn: shown at once outside install; during install collected and shown in a "Warnings" section
+warn() { if [ -n "$QUIET" ]; then WARNS+=("$*"); return 0; fi; clr; printf '  %sWARN%s %s\n' "${C_Y}" "${C_0}" "$*"; }
+flush_warns() {
+  [ ${#WARNS[@]} -gt 0 ] || return 0
+  local w; rule Warnings
+  for w in "${WARNS[@]}"; do printf ' %s⚠%s %s\n' "${C_Y}" "${C_0}" "$w"; done
+  WARNS=()
+}
+ko()   { clr; printf '  %sKO%s   %s\n' "${C_R}" "${C_0}" "$*"; }
+die()  { clr; printf '%s[kien/stack] ERROR:%s %s\n' "${E_R}" "${E_0}" "$*" >&2; exit 1; }
+# step NAME TEXT: one line per install step; busy NAME TEXT: same line while it runs (TTY only)
+busy() { [ -z "$TTY" ] || { clr; printf ' %s◌%s %-12s %s' "${C_D}" "${C_0}" "$1" "$2"; PEND=1; }; }
+step() { clr; printf ' %s✓%s %-12s %s\n' "${C_G}" "${C_0}" "$1" "$2"; }
+rule() { local b; printf -v b '%*s' $(( 50 - ${#1} )) ''; printf '\n %s─── %s %s%s\n' "${C_D}" "$1" "${b// /─}" "${C_0}"; }
+version() {
+  local v; v=$(git -C "$ROOT" describe --tags --abbrev=0 2>/dev/null) \
+    || v=$(sed -n 's/^## \[\{0,1\}\([0-9][0-9.]*\).*/v\1/p' "$ROOT/CHANGELOG.md" 2>/dev/null | head -1) || true
+  printf '%s' "$v"
+}
+header() { local v; v=$(version); printf '\n %skien/stack%s · %s%s\n\n' "${C_B}" "${C_0}" "$PACK" "${v:+ ${v}}"; }
+# how to run this installer from the user's shell (try.sh / scripts/install.sh set KSTACK_PWD)
+self_cmd() {
+  local p="$ROOT/install.sh"
+  if [ "${KSTACK_PWD:-$PWD}" = "$ROOT" ]; then p=./install.sh
+  else
+    local t='~' r=$ROOT; case "$r" in "$HOME"/*) r="$t${r#"$HOME"}" ;; esac
+    p="cd $r && ./install.sh"
+  fi
+  printf '%s' "$p"
+}
 
-usage() { sed -n '2,17p' "$0" | sed 's/^# \{0,1\}//'; }
+usage() { sed -n '2,19p' "$0" | sed 's/^# \{0,1\}//'; }
 
 while [ $# -gt 0 ]; do
   case "$1" in
     doctor|install|configure|uninstall) CMD=$1 ;;
+    password) CMD=password; PW_APP=${2:-}; [ $# -lt 2 ] || shift ;;
     --pack) [ "${2:-}" = "$PACK" ] || die "this repo installs the $PACK pack"; shift ;;
     -h|--help) usage; exit 0 ;;
     *) usage; die "unknown argument: $1" ;;
@@ -155,15 +191,18 @@ doctor() {
 # Install helm/platform/<name> once with Helm, exactly like ArgoCD will (values.yaml + cluster.yaml);
 # same release name, so ArgoCD takes it over.
 helm_bootstrap() {
-  local name=$1 ns=$2; shift 2
+  local name=$1 ns=$2 out; shift 2
   # GitHub-hosted chart downloads sometimes fail (5xx): retry before giving up
   local i; for i in 1 2 3 4 5; do
-    helm dependency update "$ROOT/helm/platform/$name" >/dev/null 2>&1 && break
-    [ "$i" -lt 5 ] || helm dependency update "$ROOT/helm/platform/$name" >/dev/null
+    out=$(helm dependency update "$ROOT/helm/platform/$name" 2>&1) && break
+    if [ "$i" -eq 5 ]; then printf '%s\n' "$out" | tail -20 >&2; die "downloading the $name chart failed"; fi
     warn "downloading the $name chart failed, retrying ($i/4)"; sleep $((i * 10))
   done
-  helm upgrade --install "$name" "$ROOT/helm/platform/$name" -n "$ns" --create-namespace \
-    -f "$CONFIG" "$@" --wait --timeout 10m >/dev/null
+  if ! out=$(helm upgrade --install "$name" "$ROOT/helm/platform/$name" -n "$ns" --create-namespace \
+    -f "$CONFIG" "$@" --wait --timeout 10m 2>&1); then
+    clr; printf '%s\n' "$out" | tail -20 >&2; die "helm install of $name failed (details above)"
+  fi
+  if [ -n "${KSTACK_VERBOSE:-}" ]; then clr; printf '%s\n' "$out"; fi
 }
 
 
@@ -234,28 +273,27 @@ internal_dns() {
 }
 
 install() {
-  local comps; comps=$(enabled_components)
+  local comps n; comps=$(enabled_components); n=$(( $(printf '%s\n' "$comps" | grep -c .) + 1 ))
   log "Pack $PACK -> ArgoCD will deploy: $(tr '\n' ' ' <<<"$comps")"
-  doctor || die "doctor failed: fix the prerequisites above"
-
+  busy Checks "cluster, Git repo..."
+  doctor || die "checks failed: fix the problems above (details: ./install.sh doctor)"
   bootstrap_secrets "$comps"
   internal_dns
+  step Checks "cluster OK, Git repo reachable"
 
   if grep -qx cilium <<<"$comps"; then
-    log "Installing Cilium (CNI, before everything else; then managed by ArgoCD)"
+    busy Cilium "installing (CNI, before everything else)..."
     # LB pool / L2 policy CRDs only exist once the Cilium operator runs: ArgoCD adds them right after.
     helm_bootstrap cilium kube-system --set ciliumLB.enabled=false
-    kubectl wait --for=condition=Ready nodes --all --timeout=5m >/dev/null
-    ok "Cilium ready, nodes Ready"
+    kubectl wait --for=condition=Ready nodes --all --timeout=5m >/dev/null || die "nodes not Ready after Cilium: kubectl get nodes"
+    step Cilium "installed, nodes Ready"
   fi
 
-  log "Installing ArgoCD (Helm, then self-managed by ArgoCD)"
+  busy ArgoCD "installing (Helm, then self-managed)..."
   # The HTTPRoute needs the Gateway API CRDs, installed later by the traefik component:
   # ArgoCD creates it when it takes itself over
   helm_bootstrap argocd argocd --set argo-cd.server.httproute.enabled=false
-  ok "ArgoCD ready"
-  local pw; pw=$(kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath='{.data.password}' 2>/dev/null | base64 -d 2>/dev/null || true)
-  log "ArgoCD login: admin / ${pw:-<see argocd-initial-admin-secret>}"
+  step ArgoCD installed
   log "  UI now (no ingress needed): kubectl -n argocd port-forward svc/argocd-server 8080:443  ->  https://localhost:8080"
 
   if [ -n "${GIT_TOKEN:-}" ]; then
@@ -275,24 +313,30 @@ YAML
     ok "GitOps repo credential registered in ArgoCD"
   fi
 
-  log "kubectl apply -f argocd/app-of-apps.yaml (as committed in Git)"
   kubectl apply -f "$APP" >/dev/null
-  ok "ArgoCD now syncs from $(repo) ($(rev)): push to change the platform"
+  local r; r=$(repo); r=${r#*://}; r=${r%.git}
+  step GitOps "syncing from ${r} ($(rev))"
 
-  wait_apps "$comps"
+  tunnel_hint
+  hosts_hint
+  flush_warns
+  rule Deploy
+  printf ' %s apps%s\n' "$n" "${C_D} (Ctrl+C is safe: ArgoCD keeps going)${C_0}"
+  trap 'clr; printf "\n\n Stopped waiting: ArgoCD keeps deploying (kubectl -n argocd get applications)\n"; summary; exit 0' INT
+  local rc=0; wait_apps "$comps" || rc=1
+  trap - INT
   summary
+  return $rc
 }
 
 wait_apps() {
   # ArgoCD deploys every app in parallel; this shows each app's status until all are ready (no time limit by
   # default, ARGOCD_TIMEOUT=<seconds> to cap it). Ctrl+C is safe: ArgoCD keeps deploying.
-  # Terminal: one line per app, redrawn in place only when a status changes. CI/pipe: one line per change.
-  local comps=$1 timeout=${ARGOCD_TIMEOUT%s} apps a n=0 w=12 start=$SECONDS
+  # Terminal: one line per app, redrawn in place when a status changes. CI/pipe: one line per change.
+  local comps=$1 timeout=${ARGOCD_TIMEOUT%s} apps a n=0 w=8 start=$SECONDS
   apps="app-of-apps $comps"
-  for a in $apps; do n=$((n + 1)); if [ ${#a} -ge $w ]; then w=$(( ${#a} + 2 )); fi; done
-  local tty=""; if [ -t 1 ] && [ "${TERM:-dumb}" != dumb ]; then tty=1; fi
-  log "Deploying $n apps with ArgoCD (Ctrl+C is safe: ArgoCD keeps going)"
-  local rc=0 prev="" el=0 j st data out row pending
+  for a in $apps; do n=$((n + 1)); if [ ${#a} -gt $w ]; then w=${#a}; fi; done
+  local rc=0 prev="" lines=0 el=0 j st data out cell sym pending
   local -a last=()
   while :; do
     data=$'\n'$(kubectl -n argocd get applications -o jsonpath='{range .items[*]}{.metadata.name}={.status.sync.status}/{.status.health.status}{"\n"}{end}' 2>/dev/null || true)
@@ -301,27 +345,27 @@ wait_apps() {
       j=$((j + 1)); st=""
       if [[ "$data" == *$'\n'"$a="* ]]; then st=${data#*$'\n'"$a="}; st=${st%%$'\n'*}; fi
       case "$st" in
-        Synced/Healthy) row="${C_G}OK${C_0}" ;;
-        */Degraded)     row="${C_Y}Degraded${C_0}"; pending=$((pending + 1)) ;;
-        ""|/|*/)        row="Pending"; pending=$((pending + 1)) ;;
-        */Healthy)      row="Syncing"; pending=$((pending + 1)) ;;
-        *)              row="${st#*/}"; pending=$((pending + 1)) ;;
+        Synced/Healthy) sym="${C_G}✓${C_0}" st=ready ;;
+        */Degraded)     sym="${C_Y}⚠${C_0}" st=degraded; pending=$((pending + 1)) ;;
+        ""|/|*/)        sym="${C_D}◌${C_0}" st=pending; pending=$((pending + 1)) ;;
+        */Healthy)      sym="${C_D}◌${C_0}" st=syncing; pending=$((pending + 1)) ;;
+        *)              sym="${C_D}◌${C_0}" st=$(tr '[:upper:]' '[:lower:]' <<<"${st#*/}"); pending=$((pending + 1)) ;;
       esac
-      if [ -n "$tty" ]; then
-        printf -v row '  %-*s %s\033[K\n' "$w" "$a" "$row"; out+=$row
-      elif [ "${last[j]:-}" != "$row" ]; then
-        printf '  %-*s %s\n' "$w" "$a" "$row"; last[j]=$row
+      if [ -n "$TTY" ]; then
+        printf -v cell '   %s %-*s %s\033[K\n' "$sym" "$w" "$a" "$st"; out+=$cell
+      elif [ "${last[j]:-}" != "$st" ]; then
+        printf '   %s %-*s %s\n' "$sym" "$w" "$a" "$st"; last[j]=$st
       fi
     done
-    if [ -n "$tty" ] && [ "$out" != "$prev" ]; then
-      if [ -n "$prev" ]; then printf '\033[%dA' "$n"; fi
-      printf '%s' "$out"; prev=$out
+    if [ -n "$TTY" ] && [ "$out" != "$prev" ]; then
+      if [ "$lines" -gt 0 ]; then printf '\033[%dA' "$lines"; fi
+      printf '%s' "$out"; prev=$out; lines=$n
     fi
     if [ "$pending" -eq 0 ]; then break; fi
     if [ "${timeout:-0}" -gt 0 ] && [ "$el" -ge "$timeout" ]; then rc=1; break; fi
     sleep 2
   done
-  if [ "$rc" -eq 0 ]; then ok "all $n apps are ready ($(( el / 60 )) min $(( el % 60 )) s)"; return 0; fi
+  if [ "$rc" -eq 0 ]; then printf ' %s✓%s All apps ready (%s min %s s)\n' "${C_G}" "${C_0}" $(( el / 60 )) $(( el % 60 )); return 0; fi
   warn "still not ready after ${timeout}s (ArgoCD keeps deploying: kubectl -n argocd get applications)"
   if [ -z "$(kubectl -n traefik get svc traefik -o jsonpath='{.status.loadBalancer.ingress}' 2>/dev/null)" ] \
      && [ "$(kubectl -n traefik get svc traefik -o jsonpath='{.spec.type}' 2>/dev/null)" = LoadBalancer ]; then
@@ -330,34 +374,67 @@ wait_apps() {
   return 1
 }
 
-# access_box "<comps>" <domain>: URL / user / password of every enabled component with a UI (charts in helm/).
-# Passwords are never printed: only the kubectl command that reads them. Standalone: access_box "$(enabled_components)" my.domain
+# access_box "<comps>" <domain>: URL + login of every enabled component with a UI whose secret exists.
+# Passwords are never printed: only the command that reads them. Plain text (saved to kstack-access.txt).
 access_box() {
-  local comps=$1 d=$2 l w=0 bar
-  local -a L=("kien/stack access ($d)" "")
+  local comps=$1 d=$2 n=0
+  has() { kubectl -n "$1" get secret "$2" >/dev/null 2>&1; }   # only show logins that already work
   sec() { printf "kubectl -n %s get secret %s -o jsonpath='{.data.%s}' | base64 -d" "$1" "$2" "$3"; }
-  L+=("ArgoCD     https://argocd.$d" "  user      admin" "  password  $(sec argocd argocd-initial-admin-secret password)")
-  if grep -qx infisical <<<"$comps"; then
-    L+=("" "Infisical  https://infisical.$d" "  user      $(sec infisical infisical-admin email)" "  password  $(sec infisical infisical-admin password)")
-  fi
-  if grep -qx monitoring <<<"$comps"; then
-    L+=("" "Grafana    https://grafana.$d" "  user      admin" "  password  $(sec monitoring grafana-admin admin-password)")
-  fi
-  for l in "${L[@]}"; do [ ${#l} -le $w ] || w=${#l}; done
-  printf -v bar '%*s' $((w + 2)) ''; bar=${bar// /─}
-  printf '┌%s┐\n' "$bar"; printf '│ %-*s │\n' "$w" "${L[0]}"; printf '├%s┤\n' "$bar"
-  for l in "${L[@]:2}"; do printf '│ %-*s │\n' "$w" "$l"; done
-  printf '└%s┘\n' "$bar"
+  row() { printf ' %-10s %s\n' "$1" "https://$2.$d"; printf ' %-10s %-9s %s\n' "" "user" "$3" "" "password" "$4"; n=$((n + 1)); }
+  if has argocd argocd-initial-admin-secret; then row ArgoCD argocd admin "$(sec argocd argocd-initial-admin-secret password)"; fi
+  if grep -qx infisical <<<"$comps" && has infisical infisical-admin; then
+    row Infisical infisical "$(sec infisical infisical-admin email)" "$(sec infisical infisical-admin password)"; fi
+  if grep -qx monitoring <<<"$comps" && has monitoring grafana-admin; then
+    row Grafana grafana admin "$(sec monitoring grafana-admin admin-password)"; fi
+  [ "$n" -gt 0 ] || echo " No login ready yet: kubectl -n argocd get applications"
+  return 0
+}
+
+# ./install.sh password <argocd|infisical|grafana>
+password() {
+  local ns name key v u=""
+  case "${1:-}" in
+    argocd) ns=argocd name=argocd-initial-admin-secret key=password ;;
+    infisical) ns=infisical name=infisical-admin key=password ;;
+    grafana) ns=monitoring name=grafana-admin key=admin-password ;;
+    *) die "usage: $(self_cmd) password <argocd|infisical|grafana>" ;;
+  esac
+  v=$(kubectl -n "$ns" get secret "$name" -o jsonpath="{.data.${key}}" 2>/dev/null | base64 -d 2>/dev/null) || v=""
+  [ -n "$v" ] || die "$1 is not ready yet (no secret $ns/$name): wait for ArgoCD (kubectl -n argocd get applications)"
+  if [ "$1" = infisical ]; then
+    u=$(kubectl -n "$ns" get secret "$name" -o jsonpath='{.data.email}' 2>/dev/null | base64 -d 2>/dev/null) || u=""
+    printf 'user:     %s\npassword: %s\n' "$u" "$v"
+  else printf '%s\n' "$v"; fi
+}
+
+hosts_hint() {
+  local d h c; d=$(cfg .global.domain)
+  case "$d" in *.sslip.io|*.nip.io) ;; *) return 0 ;; esac   # real domain: DNS does the job
+  [ "$(uname -s)" = Darwin ] || [ -n "${WINDIR:-}" ] || return 0   # Linux reaches the node IP directly
+  h="argocd.$d"
+  for c in infisical:infisical monitoring:grafana; do grep -qx "${c%%:*}" <<<"$(enabled_components)" && h="$h ${c#*:}.$d"; done
+  warn "No domain: on macOS the cluster IP is not reachable, add the URLs to /etc/hosts:
+     echo \"127.0.0.1 $h\" | sudo tee -a /etc/hosts
+   (after uninstall: sudo sed -i '' '/$d/d' /etc/hosts)"
+}
+
+tunnel_hint() {
+  local l; l=$(kubectl get nodes -o jsonpath='{.items[0].metadata.labels}{.items[0].spec.providerID}' 2>/dev/null) || true
+  case "$l" in
+    *minikube.k8s.io*) warn 'minikube: run "minikube tunnel" in another terminal, or the URLs will not answer' ;;
+    *kind://*) warn "kind: Traefik needs a LoadBalancer IP (cloud-provider-kind), or the URLs will not answer" ;;
+  esac
 }
 
 summary() {
+  flush_warns
   local d out; d=$(cfg .global.domain)
-  printf '%s[kien/stack] Done. Access:%s\n' "${C_G}" "${C_0}"
+  rule Access
   out=$(access_box "$(enabled_components)" "$d")
-  printf '%s\n' "$out" | tee "$ROOT/kstack-access.txt"
-  printf '%s  (saved to %s/kstack-access.txt, no password inside)%s\n' "${C_D}" "${ROOT}" "${C_0}"
-  echo "  Change anything: edit cluster.yaml or helm/*/<component>/values.yaml in $(repo), push."
-  [ "$(cfg .global.tls.issuer)" = selfsigned ] && printf '%s  (self-signed certificates: CA in cert-manager/selfsigned-ca)%s\n' "${C_D}" "${C_0}"
+  printf '%s\n' "$out" >"$ROOT/kstack-access.txt"
+  printf '%s\n' "$out" | sed -E "s/^ ([A-Za-z]+)/ ${C_B}\1${C_0}/"
+  printf '\n %sSaved to %s (no passwords)%s\n' "${C_D}" "$ROOT/kstack-access.txt" "${C_0}"
+  [ -n "${KSTACK_DEMO:-}" ] || echo " To change anything: edit cluster.yaml or helm/, then git push"
   return 0
 }
 
@@ -449,7 +526,8 @@ uninstall() {
 command -v yq >/dev/null 2>&1 || die "yq (mikefarah, v4) is required"
 case "$CMD" in
   doctor) doctor ;;
-  install) setup; install ;;
-  configure) setup force; install ;;
+  install) header; setup; QUIET=1; install ;;
+  configure) header; setup force; QUIET=1; install ;;
   uninstall) uninstall ;;
+  password) password "$PW_APP" ;;
 esac
