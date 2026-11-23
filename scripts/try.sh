@@ -27,7 +27,7 @@ fi
 kubectl version --request-timeout=10s >/dev/null 2>&1 || die "no reachable cluster in the current kubectl context.
   No Kubernetes? k3s in one minute: curl -sfL https://get.k3s.io | INSTALL_K3S_EXEC=\"--disable traefik\" sh -"
 
-if [ -d "$DIR/src/.git" ]; then git -C "$DIR/src" fetch -q origin "$REF" && git -C "$DIR/src" checkout -q FETCH_HEAD
+if [ -d "$DIR/src/.git" ]; then git -C "$DIR/src" fetch -q origin "$REF" && git -C "$DIR/src" checkout -qf FETCH_HEAD
 else mkdir -p "$DIR"; git -c advice.detachedHead=false clone -q --depth 1 -b "$REF" "$REPO" "$DIR/src"; fi
 cd "$DIR/src"
 
