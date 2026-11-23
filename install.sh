@@ -39,7 +39,15 @@ verbose() { [ -z "$QUIET" ] || [ -n "${KSTACK_VERBOSE:-}" ]; }
 clr()  { if [ -n "$PEND" ]; then printf '\r\033[K'; PEND=""; fi; }
 log()  { verbose || return 0; clr; printf '%s[kien/stack]%s %s\n' "${C_H}" "${C_0}" "$*"; }
 ok()   { verbose || return 0; clr; printf '  %sOK%s   %s\n' "${C_G}" "${C_0}" "$*"; }
-warn() { clr; printf '  %sWARN%s %s\n' "${C_Y}" "${C_0}" "$*"; }
+WARNS=()
+# warn: shown at once outside install; during install collected and shown in a "Warnings" section
+warn() { if [ -n "$QUIET" ]; then WARNS+=("$*"); return 0; fi; clr; printf '  %sWARN%s %s\n' "${C_Y}" "${C_0}" "$*"; }
+flush_warns() {
+  [ ${#WARNS[@]} -gt 0 ] || return 0
+  local w; rule Warnings
+  for w in "${WARNS[@]}"; do printf ' %s⚠%s %s\n' "${C_Y}" "${C_0}" "$w"; done
+  WARNS=()
+}
 ko()   { clr; printf '  %sKO%s   %s\n' "${C_R}" "${C_0}" "$*"; }
 die()  { clr; printf '%s[kien/stack] ERROR:%s %s\n' "${E_R}" "${E_0}" "$*" >&2; exit 1; }
 # step NAME TEXT: one line per install step; busy NAME TEXT: same line while it runs (TTY only)
@@ -311,6 +319,7 @@ YAML
 
   tunnel_hint
   hosts_hint
+  flush_warns
   printf '\n Deploying %s apps%s\n' "$n" "${C_D} (Ctrl+C is safe: ArgoCD keeps going)${C_0}"
   trap 'clr; printf "\n\n Stopped waiting: ArgoCD keeps deploying (kubectl -n argocd get applications)\n"; summary; exit 0' INT
   local rc=0; wait_apps "$comps" || rc=1
@@ -403,21 +412,21 @@ hosts_hint() {
   [ "$(uname -s)" = Darwin ] || [ -n "${WINDIR:-}" ] || return 0   # Linux reaches the node IP directly
   h="argocd.$d"
   for c in infisical:infisical monitoring:grafana; do grep -qx "${c%%:*}" <<<"$(enabled_components)" && h="$h ${c#*:}.$d"; done
-  printf '\n %s⚠%s No domain: on macOS the cluster IP is not reachable, add this line to /etc/hosts\n' "${C_Y}" "${C_0}"
-  printf '     echo "127.0.0.1 %s" | sudo tee -a /etc/hosts\n' "$h"
-  printf '   %sRemove it after uninstall: sudo sed -i "" "/%s/d" /etc/hosts%s\n' "${C_D}" "$d" "${C_0}"
+  warn "No domain: on macOS the cluster IP is not reachable, add the URLs to /etc/hosts:
+     echo \"127.0.0.1 $h\" | sudo tee -a /etc/hosts
+   (after uninstall: sudo sed -i '' '/$d/d' /etc/hosts)"
 }
 
 tunnel_hint() {
   local l; l=$(kubectl get nodes -o jsonpath='{.items[0].metadata.labels}{.items[0].spec.providerID}' 2>/dev/null) || true
   case "$l" in
-    *minikube.k8s.io*) printf '\n %s⚠%s minikube: run "minikube tunnel" in another terminal, or the URLs will not answer\n' "${C_Y}" "${C_0}"
-      ;;
-    *kind://*) printf '\n %s⚠%s kind: Traefik needs a LoadBalancer IP (cloud-provider-kind), or the URLs will not answer\n' "${C_Y}" "${C_0}" ;;
+    *minikube.k8s.io*) warn 'minikube: run "minikube tunnel" in another terminal, or the URLs will not answer' ;;
+    *kind://*) warn "kind: Traefik needs a LoadBalancer IP (cloud-provider-kind), or the URLs will not answer" ;;
   esac
 }
 
 summary() {
+  flush_warns
   local d out; d=$(cfg .global.domain)
   rule Access
   out=$(access_box "$(enabled_components)" "$d")
