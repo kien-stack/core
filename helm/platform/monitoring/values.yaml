@@ -46,6 +46,28 @@ kube-prometheus-stack:
             name: traefik
             namespace: traefik
             sectionName: https-grafana
+    # Grafana.com dashboard 25747 "VictoriaLogs - Explorer for Kubernetes logs", downloaded at startup,
+    # its DS_VICTORIALOGS input mapped to the "VictoriaLogs" datasource above.
+    dashboardProviders:
+      dashboardproviders.yaml:
+        apiVersion: 1
+        providers:
+          - name: gnet
+            orgId: 1
+            folder: Logs
+            type: file
+            disableDeletion: true
+            editable: false
+            options:
+              path: /var/lib/grafana/dashboards/gnet
+    dashboards:
+      gnet:
+        victorialogs-explorer:
+          gnetId: 25747
+          revision: 1
+          datasource:
+            - name: DS_VICTORIALOGS
+              value: VictoriaLogs
   alertmanager:
     enabled: false
   prometheusOperator:
