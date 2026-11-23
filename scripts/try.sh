@@ -100,8 +100,11 @@ D="$dom" V="$REF" EL="$(yq -o=json -I=0 '.spec.generators[0].list.elements' argo
 KSTACK_DEMO=1 bash install.sh install
 cat <<TXT
 
-  Demo: self-signed certs, no customisation. URLs down on minikube? run: minikube tunnel
-  Real install:  curl -fsSL https://raw.githubusercontent.com/kien-stack/essential/main/scripts/install.sh | bash
-  Remove:        curl -fsSL https://raw.githubusercontent.com/kien-stack/essential/main/scripts/try.sh | bash -s uninstall
-  More packs:    https://shop.kien.cc
+Next steps
+  1. URLs not answering on minikube?  minikube tunnel
+  2. Real install (your domain, your Git repo):
+     curl -fsSL https://raw.githubusercontent.com/kien-stack/essential/main/scripts/install.sh | bash
+  3. More packs (AI Platform, Pro):  https://shop.kien.cc
+  Remove the demo:
+     curl -fsSL https://raw.githubusercontent.com/kien-stack/essential/main/scripts/try.sh | bash -s uninstall
 TXT
