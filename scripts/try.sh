@@ -58,7 +58,7 @@ if [ "${1:-}" = uninstall ]; then
   # Workloads first, while the operators (CloudNativePG, External Secrets, cert-manager, OpenEBS) still run
   # and can clear the finalizers of their own resources; then the operators.
   ops="cert-manager cnpg-system external-secrets openebs"
-  first=$(for n in $ns; do case " $ops " in *" $n "*) ;; *) echo "$n" ;; esac; done)
+  first=$(for n in $ns; do case " $ops " in (*" $n "*) ;; (*) echo "$n" ;; esac; done)
   log "deleting namespaces: $(echo $first)"
   kubectl delete ns $first --ignore-not-found --wait=true --timeout=90s 2>/dev/null || true
   log "deleting operators: $ops"

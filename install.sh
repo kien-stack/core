@@ -28,11 +28,11 @@ CMD=install
 ARGOCD_TIMEOUT=${ARGOCD_TIMEOUT:-0}   # seconds to wait for the apps, 0 = until ready
 
 # ---------------------------------------------------------------- ui (byte-identical in essential, ai, full)
-# fancy: TTY, colors, one spinner line per step. plain: no TTY / TERM=dumb / NO_COLOR, no ANSI, no \r,
-# one line per event. verbose (--verbose, KSTACK_VERBOSE=1): the raw logs, as before.
+# fancy: TTY, colors, Clack-style lines (◒ spinner, ◇ done, ■ failed, ▲ warning, │ bar). plain: no TTY /
+# TERM=dumb / NO_COLOR, no ANSI, no \r, one line per event. verbose (--verbose, KSTACK_VERBOSE=1): the raw logs.
 # Inside a step, stdout/stderr go to $UI_LOG in the old text format; warnings are also shown under the step.
 UI_MODE=fancy UI_LOG=${KSTACK_LOG:-$ROOT/kstack-install.log} UI_LOGOK="" UI_STEP="" UI_SPIN="" UI_LINE="" UI_T0=$SECONDS
-UI_STEP_T=0 UI_STEP_L=0
+UI_STEP_T=0 UI_STEP_L=0 UI_HEAD="" UI_QUIET="" UI_COLS=80 UI_APPS=0
 UI_WARNS=()
 exec 7>&1 8>&2   # the terminal, whatever a step redirects
 ui_setup() {
@@ -41,32 +41,61 @@ ui_setup() {
   elif [ ! -t 1 ] || [ "${TERM:-dumb}" = dumb ] || [ -n "${NO_COLOR+x}" ]; then UI_MODE=plain
   else UI_MODE=fancy; fi
   if [ ! -t 1 ] || [ "${TERM:-dumb}" = dumb ] || [ -n "${NO_COLOR+x}" ]; then
-    C_B="" C_D="" C_R="" C_G="" C_Y="" C_C="" C_BL="" C_0=""
-  else C_B="${e}[1m" C_D="${e}[2m" C_R="${e}[31m" C_G="${e}[32m" C_Y="${e}[33m" C_C="${e}[36m" C_BL="${e}[1;34m" C_0="${e}[0m"; fi
+    C_B="" C_D="" C_R="" C_G="" C_Y="" C_C="" C_BL="" C_GY="" C_0=""
+  else C_B="${e}[1m" C_D="${e}[2m" C_R="${e}[31m" C_G="${e}[32m" C_Y="${e}[33m" C_C="${e}[36m" C_BL="${e}[1;34m" C_GY="${e}[90m" C_0="${e}[0m"; fi
   # old-style lines: colored on the terminal in verbose mode, plain text in the log file
   if [ "$UI_MODE" = verbose ]; then R_R=$C_R R_G=$C_G R_Y=$C_Y R_BL=$C_BL R_0=$C_0; else R_R="" R_G="" R_Y="" R_BL="" R_0=""; fi
 }
 ui_setup
 ui_raw()   { [ "$UI_MODE" = verbose ] || [ -n "$UI_STEP" ]; }
 ui_tolog() { [ -z "$UI_LOGOK" ] || printf '%s\n' "$*" >>"$UI_LOG"; }
-log()  { if ui_raw; then printf '%s[kien/stack]%s %s\n' "$R_BL" "$R_0" "$*"; else ui_tolog "[kien/stack] $*"; printf '%s%s%s\n' "$C_B" "$*" "$C_0" >&7; fi; }
-ok()   { if ui_raw; then printf '  %sOK%s   %s\n' "$R_G" "$R_0" "$*"; else ui_tolog "  OK   $*"; printf '  %s✔%s %s\n' "$C_G" "$C_0" "$*" >&7; fi; }
+# ui_fit <text> <room>: <text> cut to <room> characters (…), so that a line redrawn in place never wraps
+ui_fit() {
+  local t=$1 r=$2
+  if [ "$r" -lt 1 ]; then return 0; fi
+  if [ "${#t}" -gt "$r" ]; then t="${t:0:$(( r - 1 ))}…"; fi
+  printf '%s' "$t"
+}
+# ui_line <color> <symbol> <text> [<text color>]: one Clack line on the terminal ("◇  text")
+ui_line() { printf '%s%s%s  %s%s%s\n' "$1" "$2" "$C_0" "${4:-}" "$(ui_fit "$3" $(( UI_COLS - 3 )))" "$C_0" >&7; }
+ui_bar()  { printf '%s│%s\n' "$C_GY" "$C_0" >&7; }
+log()  {
+  if ui_raw; then printf '%s[kien/stack]%s %s\n' "$R_BL" "$R_0" "$*"; return; fi
+  ui_tolog "[kien/stack] $*"
+  if [ "$UI_MODE" = fancy ]; then ui_line "$C_GY" '│' "$*"; else printf '%s\n' "$*" >&7; fi
+}
+ok()   {
+  if ui_raw; then printf '  %sOK%s   %s\n' "$R_G" "$R_0" "$*"; return; fi
+  ui_tolog "  OK   $*"
+  if [ "$UI_MODE" = fancy ]; then ui_line "$C_G" '◇' "$*"; else printf '  ✔ %s\n' "$*" >&7; fi
+}
 warn() {
   if [ -n "$UI_STEP" ]; then UI_WARNS+=("$*"); fi
-  if ui_raw; then printf '  %sWARN%s %s\n' "$R_Y" "$R_0" "$*"; else ui_tolog "  WARN $*"; printf '  %s⚠ %s%s\n' "$C_Y" "$*" "$C_0" >&7; fi
+  if ui_raw; then printf '  %sWARN%s %s\n' "$R_Y" "$R_0" "$*"; return; fi
+  ui_tolog "  WARN $*"
+  if [ "$UI_MODE" = fancy ]; then ui_line "$C_Y" '▲' "$*" "$C_Y"; else printf '  ⚠ %s\n' "$*" >&7; fi
 }
-ko()   { if ui_raw; then printf '  %sKO%s   %s\n' "$R_R" "$R_0" "$*"; else ui_tolog "  KO   $*"; printf '  %s✖%s %s\n' "$C_R" "$C_0" "$*" >&7; fi; }
+ko()   {
+  if ui_raw; then printf '  %sKO%s   %s\n' "$R_R" "$R_0" "$*"; return; fi
+  ui_tolog "  KO   $*"
+  if [ "$UI_MODE" = fancy ]; then ui_line "$C_R" '■' "$*"; else printf '  ✖ %s\n' "$*" >&7; fi
+}
 die()  {
   if ui_raw; then printf '%s[kien/stack] ERROR:%s %s\n' "$R_R" "$R_0" "$*" >&2
-  else ui_tolog "[kien/stack] ERROR: $*"; printf '%s✖ %s%s\n' "$C_R" "$*" "$C_0" >&8; fi
+  else
+    ui_tolog "[kien/stack] ERROR: $*"
+    if [ "$UI_MODE" = fancy ]; then printf '%s■  %s%s\n' "$C_R" "$*" "$C_0" >&8; else printf '✖ %s\n' "$*" >&8; fi
+  fi
   exit 1
 }
 ui_now()  { if [ -n "${EPOCHREALTIME:-}" ]; then printf '%s\n' "${EPOCHREALTIME/,/.}"; else date +%s; fi; }
 ui_secs() { awk -v a="$1" -v b="$(ui_now)" 'BEGIN { printf "%.1f", b - a }'; }
 ui_mmss() { if [ "$1" -lt 60 ]; then printf '%ds' "$1"; else printf '%dm%02ds' $(( $1 / 60 )) $(( $1 % 60 )); fi; }
 ui_cols() {
-  local c=${COLUMNS:-}; [ -n "$c" ] || c=$(tput cols 2>/dev/null || true)
-  case "$c" in ''|*[!0-9]*) c=80 ;; esac; printf '%s\n' "$c"
+  local c=""; c=$( { stty size </dev/tty; } 2>/dev/null || true); c=${c#* }
+  case "$c" in ''|*[!0-9]*|0) c=${COLUMNS:-} ;; esac
+  case "$c" in ''|*[!0-9]*|0) c=$(tput cols 2>/dev/null || true) ;; esac
+  case "$c" in ''|*[!0-9]*|0) c=80 ;; esac; printf '%s\n' "$c"
 }
 ui_version() {
   local v=""
@@ -80,13 +109,21 @@ ui_init() {
   if { : >"$UI_LOG"; } 2>/dev/null; then UI_LOGOK=1
   else UI_LOG="${TMPDIR:-/tmp}/kstack-install.$$.log"; : >"$UI_LOG"; UI_LOGOK=1; fi
   local ver ctx; ver=$(ui_version); ctx=$(kubectl config current-context 2>/dev/null || true)
-  printf '%skien/stack %s%s %sv%s%s\n' "$C_B" "${PACK_NAME:-$PACK}" "$C_0" "$C_D" "$ver" "$C_0"
-  printf '%sContext: %s   Log: %s%s\n\n' "$C_D" "${ctx:-none}" "$UI_LOG" "$C_0"
+  UI_COLS=$(ui_cols)
+  # shellcheck disable=SC2034  # UI_HEAD: read by the prompts block (no second ┌ header)
+  if [ "$UI_MODE" = fancy ]; then
+    ui_line "$C_GY" '┌' "kien/stack · ${PACK_NAME:-$PACK} v$ver"
+    ui_line "$C_GY" '│' "Context: ${ctx:-none}   Log: $UI_LOG" "$C_D"; ui_bar; UI_HEAD=1
+  else
+    printf '%skien/stack %s%s %sv%s%s\n' "$C_B" "${PACK_NAME:-$PACK}" "$C_0" "$C_D" "$ver" "$C_0"
+    printf '%sContext: %s   Log: %s%s\n\n' "$C_D" "${ctx:-none}" "$UI_LOG" "$C_0"
+  fi
   printf 'kien/stack %s v%s, context %s, %s\n' "${PACK_NAME:-$PACK}" "$ver" "${ctx:-none}" "$(date)" >>"$UI_LOG"
   if [ "$UI_MODE" = verbose ]; then exec > >(tee -a "$UI_LOG") 2> >(tee -a "$UI_LOG" >&8); fi
   trap ui_exit EXIT
   trap 'exit 130' INT
   trap 'exit 143' TERM
+  trap 'UI_COLS=$(ui_cols)' WINCH
 }
 ui_exit() {
   local rc=$?
@@ -95,16 +132,23 @@ ui_exit() {
   if [ -n "$UI_LINE" ]; then printf '\n' >&7; UI_LINE=""; fi
   if [ -n "$UI_STEP" ]; then ui_step_end "$rc"; fi
   if [ "$UI_MODE" = fancy ]; then printf '\033[?25h' >&7; fi
-  if [ "$rc" -ne 0 ]; then printf '%sLog: %s%s\n' "$C_D" "$UI_LOG" "$C_0" >&8; fi
+  UI_APPS=0
+  if [ "$rc" -ne 0 ] && [ -z "$UI_QUIET" ]; then
+    if [ "$UI_MODE" = fancy ]; then printf '%s└%s  %sLog: %s%s\n' "$C_GY" "$C_0" "$C_D" "$UI_LOG" "$C_0" >&8
+    else printf 'Log: %s\n' "$UI_LOG" >&8; fi
+  fi
   return "$rc"
 }
-ui_spinner() {  # background: redraws "<frame> <name> (<s>)" until killed
-  local i=0 s=$SECONDS
-  local -a f=(⠋ ⠙ ⠹ ⠸ ⠼ ⠴ ⠦ ⠧ ⠇ ⠏)
+ui_frame() { case $(( $1 % 4 )) in 0) printf '◒' ;; 1) printf '◐' ;; 2) printf '◓' ;; *) printf '◑' ;; esac; }
+ui_spinner() {  # background: redraws "<frame>  <name> (<s>)" until killed
+  local i=0 s=$SECONDS f name
+  trap 'UI_COLS=$(ui_cols)' WINCH
   printf '\033[?25l'
   while :; do
-    printf '\r%s%s%s %s %s(%ds)%s\033[K' "$C_C" "${f[i % 10]}" "$C_0" "$1" "$C_D" $(( SECONDS - s )) "$C_0"
-    i=$(( i + 1 )); sleep 0.1
+    f=$(ui_frame "$i")
+    name=$(ui_fit "$UI_STEP" $(( UI_COLS - 12 )))
+    printf '\r%s%s%s  %s %s(%ds)%s\033[K' "$C_C" "$f" "$C_0" "$name" "$C_D" $(( SECONDS - s )) "$C_0"
+    i=$(( i + 1 )); sleep 0.15
   done
 }
 ui_spin_stop() {
@@ -121,7 +165,7 @@ step() {
   if [ "$UI_MODE" = verbose ]; then log "$name"; "$@"; return; fi
   UI_WARNS=(); UI_STEP_T=$(ui_now); UI_STEP_L=$(wc -l <"$UI_LOG"); UI_STEP=$name
   printf '\n== %s\n' "$name" >>"$UI_LOG"
-  if [ "$UI_MODE" = fancy ]; then ui_spinner "$name" >&7 2>/dev/null & UI_SPIN=$!
+  if [ "$UI_MODE" = fancy ]; then UI_COLS=$(ui_cols); ui_spinner >&7 2>/dev/null & UI_SPIN=$!
   else printf -- '- %s ...\n' "$name" >&7; fi
   "$@" >>"$UI_LOG" 2>&1
   local rc=$?
@@ -132,33 +176,62 @@ ui_step_end() {
   local rc=$1 name=$UI_STEP t w
   ui_spin_stop; UI_STEP=""
   t=$(ui_secs "$UI_STEP_T")
-  if [ "$rc" -eq 0 ]; then printf '%s✔%s %s %s(%ss)%s\n' "$C_G" "$C_0" "$name" "$C_D" "$t" "$C_0" >&7
-  else printf '%s✖ %s%s %s(%ss)%s\n' "$C_R" "$name" "$C_0" "$C_D" "$t" "$C_0" >&7; fi
-  for w in ${UI_WARNS[@]+"${UI_WARNS[@]}"}; do printf '  %s⚠ %s%s\n' "$C_Y" "$w" "$C_0" >&7; done
+  if [ "$UI_MODE" = fancy ]; then
+    if [ "$rc" -eq 0 ]; then ui_line "$C_G" '◇' "$name ${C_D}(${t}s)"
+    else ui_line "$C_R" '■' "$name ${C_D}(${t}s)" "$C_R"; fi
+    for w in ${UI_WARNS[@]+"${UI_WARNS[@]}"}; do ui_line "$C_Y" '▲' "$w" "$C_Y"; done
+  else
+    if [ "$rc" -eq 0 ]; then printf '✔ %s (%ss)\n' "$name" "$t" >&7; else printf '✖ %s (%ss)\n' "$name" "$t" >&7; fi
+    for w in ${UI_WARNS[@]+"${UI_WARNS[@]}"}; do printf '  ⚠ %s\n' "$w" >&7; done
+  fi
   UI_WARNS=()
   if [ "$rc" -ne 0 ]; then
-    tail -n +"$(( UI_STEP_L + 3 ))" "$UI_LOG" | tail -n 20 | while IFS= read -r w; do printf '    %s%s%s\n' "$C_D" "$w" "$C_0"; done >&7
-  fi
+    tail -n +"$(( UI_STEP_L + 3 ))" "$UI_LOG" | tail -n 20 | while IFS= read -r w; do
+      if [ "$UI_MODE" = fancy ]; then ui_line "$C_GY" '│' "$w" "$C_D"; else printf '    %s\n' "$w"; fi
+    done >&7
+  elif [ "$UI_MODE" = fancy ]; then ui_bar; fi
 }
-# ui_apps <frame> <ready> <total> <elapsed s> <pending names> <degraded names>: the wait_apps line (fancy)
+# ui_apps <frame#> <width> <name=status>...: the wait_apps lines (fancy), redrawn in place
 ui_apps() {
-  local fr=$1 r=$2 n=$3 el=$4 pend=$5 bad=" $6 " bar="" i f p room a
-  f=10; if [ "$n" -gt 0 ]; then f=$(( r * 10 / n )); fi
-  for (( i = 0; i < 10; i++ )); do if [ "$i" -lt "$f" ]; then bar+="█"; else bar+="░"; fi; done
-  p="x Syncing apps [0123456789] $r/$n  ($(ui_mmss "$el"))  "
-  room=$(( UI_COLS - ${#p} - 1 ))
-  printf '\r%s%s%s Syncing apps [%s] %s/%s  %s(%s)%s ' "$C_C" "$fr" "$C_0" "$bar" "$r" "$n" "$C_D" "$(ui_mmss "$el")" "$C_0" >&7
-  for a in $pend; do
-    if [ $(( ${#a} + 1 )) -gt "$room" ]; then printf '%s…%s' "$C_D" "$C_0" >&7; break; fi
-    case "$bad" in *" $a "*) printf ' %s%s%s' "$C_Y" "$a" "$C_0" >&7 ;; *) printf ' %s%s%s' "$C_D" "$a" "$C_0" >&7 ;; esac
-    room=$(( room - ${#a} - 1 ))
+  local w=$2 a st sym col tc out="" f
+  f=$(ui_frame "$1"); shift 2
+  for a in "$@"; do
+    st=${a#*=} a=${a%%=*} tc=""
+    case "$st" in
+      OK)        sym='◇' col=$C_G ;;
+      Degraded)  sym='▲' col=$C_Y tc=$C_Y ;;
+      Timeout:*) sym='▲' col=$C_R tc=$C_R st=${st#Timeout:} ;;
+      *)         sym=$f col=$C_C ;;
+    esac
+    a=$(printf '%-*s %s' "$w" "$a" "$st")
+    out="$out$C_GY│$C_0  $col$sym$C_0 $tc$(ui_fit "$a" $(( UI_COLS - 6 )))$C_0"$'\033[K\n'
   done
-  printf '\033[K' >&7; UI_LINE=1
+  if [ "$UI_APPS" -gt 0 ]; then printf '\033[%dA' "$UI_APPS" >&7; fi
+  printf '\r%s' "$out" >&7; UI_APPS=$#
 }
-UI_COLS=80
 ui_done() {
   ui_tolog "Done in $(ui_mmss $(( SECONDS - UI_T0 )))"
-  printf '\n%s%sDone in %s%s\n' "$C_B" "$C_G" "$(ui_mmss $(( SECONDS - UI_T0 )))" "$C_0" >&7
+  if [ "$UI_MODE" = fancy ]; then ui_line "$C_GY" '└' "Done in $(ui_mmss $(( SECONDS - UI_T0 )))" "$C_B$C_G"
+  else printf '\nDone in %s\n' "$(ui_mmss $(( SECONDS - UI_T0 )))" >&7; fi
+}
+# ui_note <title> <line>...: a Clack note box (fancy), else the classic ┌─┐ box
+ui_note() {
+  local l w=0 bar t=$1; shift
+  for l in "$t" "$@"; do [ "${#l}" -le "$w" ] || w=${#l}; done
+  if [ "$UI_MODE" = fancy ]; then
+    # printed once, never redrawn: no cut (the kubectl commands must stay complete)
+    printf -v bar '%*s' $(( w - ${#t} + 1 )) ''; bar=${bar// /─}
+    printf '%s◇%s  %s %s%s╮%s\n' "$C_G" "$C_0" "$t" "$C_GY" "$bar" "$C_0"
+    printf -v bar '%*s' $(( w + 4 )) ''; printf '%s│%s│%s\n' "$C_GY" "$bar" "$C_0"
+    for l in "$@"; do printf '%s│%s  %-*s  %s│%s\n' "$C_GY" "$C_0" "$w" "$l" "$C_GY" "$C_0"; done
+    printf '%s│%s│%s\n' "$C_GY" "$bar" "$C_0"
+    bar=${bar// /─}; printf '%s├%s╯%s\n' "$C_GY" "$bar" "$C_0"
+  else
+    printf -v bar '%*s' $((w + 2)) ''; bar=${bar// /─}
+    printf '┌%s┐\n' "$bar"; printf '│ %-*s │\n' "$w" "$t"; printf '├%s┤\n' "$bar"
+    for l in "$@"; do printf '│ %-*s │\n' "$w" "$l"; done
+    printf '└%s┘\n' "$bar"
+  fi
 }
 # ---------------------------------------------------------------- end ui
 
@@ -425,50 +498,62 @@ install() {
 }
 
 wait_apps() {
-  # ArgoCD deploys every app in parallel; this shows the progress until all are ready (no time limit by
+  # ArgoCD deploys every app in parallel; this shows each app's status until all are ready (no time limit by
   # default, ARGOCD_TIMEOUT=<seconds> to cap it). Ctrl+C is safe: ArgoCD keeps deploying.
-  # Terminal: one line redrawn in place. Plain: one line when the ready count changes. Verbose: the table.
+  # Terminal: one line per app (◒ pending, ◇ OK, ▲ degraded), redrawn in place. Plain: one line per status
+  # change per app. Verbose: the original table.
   if [ "$UI_MODE" = verbose ]; then wait_apps_table "$@"; return; fi
-  local comps=$1 timeout=${ARGOCD_TIMEOUT%s} apps a n=0 start=$SECONDS
+  local comps=$1 timeout=${ARGOCD_TIMEOUT%s} apps a n=0 w=12 start=$SECONDS
   apps="app-of-apps $comps"
-  for a in $apps; do n=$((n + 1)); done
+  for a in $apps; do n=$((n + 1)); if [ ${#a} -ge $w ]; then w=$(( ${#a} + 2 )); fi; done
   ui_tolog "[kien/stack] Deploying $n apps with ArgoCD (Ctrl+C is safe: ArgoCD keeps going)"
-  UI_COLS=$(ui_cols)
-  local rc=0 el=0 j i=0 st data ready pend bad lastr=-1
-  local -a last=() fr=(⠋ ⠙ ⠹ ⠸ ⠼ ⠴ ⠦ ⠧ ⠇ ⠏)
-  if [ "$UI_MODE" = fancy ]; then printf '\033[?25l' >&7; else printf -- '- Syncing apps ...\n' >&7; fi
+  if [ "$UI_MODE" = fancy ]; then ui_line "$C_GY" '│' "Deploying $n apps with ArgoCD (Ctrl+C is safe: ArgoCD keeps going)" "$C_D"; printf '\033[?25l' >&7
+  else printf 'Deploying %d apps with ArgoCD\n' "$n" >&7; fi
+  UI_COLS=$(ui_cols); UI_APPS=0
+  local rc=0 el=0 j i=0 st data ready row
+  local -a last=() rows=()
   while :; do
     data=$'\n'$(kubectl -n argocd get applications -o jsonpath='{range .items[*]}{.metadata.name}={.status.sync.status}/{.status.health.status}{"\n"}{end}' 2>/dev/null || true)
-    el=$(( SECONDS - start )); ready=0; pend=""; bad=""; j=0
+    el=$(( SECONDS - start )); ready=0; j=0; rows=()
     for a in $apps; do
       j=$((j + 1)); st=""
       if [[ "$data" == *$'\n'"$a="* ]]; then st=${data#*$'\n'"$a="}; st=${st%%$'\n'*}; fi
-      if [ "${last[j]-unset}" != "$st" ]; then ui_tolog "  $a ${st:-Pending} ($(ui_mmss "$el"))"; last[j]=$st; fi
       case "$st" in
-        Synced/Healthy) ready=$((ready + 1)) ;;
-        */Degraded)     pend+=" $a"; bad+=" $a" ;;
-        *)              pend+=" $a" ;;
+        Synced/Healthy) row=OK; ready=$((ready + 1)) ;;
+        */Degraded)     row=Degraded ;;
+        ""|/|*/)        row=Pending ;;
+        */Healthy)      row=Syncing ;;
+        *)              row=${st#*/} ;;
       esac
+      if [ "${last[j]-unset}" != "$row" ]; then
+        ui_tolog "  $a $row ($(ui_mmss "$el"))"
+        if [ "$UI_MODE" = plain ]; then printf '  %-*s %s\n' "$w" "$a" "$row" >&7; fi
+        last[j]=$row
+      fi
+      rows[${#rows[@]}]="$a=$row"
     done
-    if [ "$UI_MODE" = fancy ]; then ui_apps "${fr[i % 10]}" "$ready" "$n" "$el" "$pend" "$bad"
-    elif [ "$ready" -ne "$lastr" ]; then printf 'Syncing apps %d/%d\n' "$ready" "$n" >&7; lastr=$ready; fi
     if [ "$ready" -eq "$n" ]; then break; fi
     if [ "${timeout:-0}" -gt 0 ] && [ "$el" -ge "$timeout" ]; then rc=1; break; fi
     if [ "$UI_MODE" = fancy ]; then
-      for _ in 1 2 3 4 5 6 7 8 9 10; do
-        sleep 0.2; i=$((i + 1)); ui_apps "${fr[i % 10]}" "$ready" "$n" $(( SECONDS - start )) "$pend" "$bad"
+      for _ in 1 2 3 4 5 6 7 8 9 10 11 12 13; do
+        ui_apps "$i" "$w" "${rows[@]}"; i=$((i + 1)); sleep 0.15
       done
     else sleep 2; fi
   done
-  if [ "$UI_MODE" = fancy ]; then printf '\r\033[K\033[?25h' >&7; UI_LINE=""; fi
+  if [ "$UI_MODE" = fancy ]; then
+    if [ "$rc" -ne 0 ]; then
+      j=0; for a in "${rows[@]}"; do case "$a" in *=OK) ;; *) rows[j]="${a%%=*}=Timeout:${a#*=}" ;; esac; j=$((j + 1)); done
+    fi
+    ui_apps "$i" "$w" "${rows[@]}"; UI_APPS=0; printf '\033[?25h' >&7
+  fi
   if [ "$rc" -eq 0 ]; then
     ui_tolog "  OK   all $n apps are ready ($(( el / 60 )) min $(( el % 60 )) s)"
-    printf '%s✔%s Synced %d/%d apps %s(%s)%s\n' "$C_G" "$C_0" "$n" "$n" "$C_D" "$(ui_mmss "$el")" "$C_0" >&7
+    if [ "$UI_MODE" = fancy ]; then ui_line "$C_G" '◇' "$n/$n apps ready ${C_D}($(ui_mmss "$el"))"; ui_bar
+    else printf '✔ %d/%d apps ready (%s)\n' "$n" "$n" "$(ui_mmss "$el")" >&7; fi
     return 0
   fi
-  printf '%s✖ Synced %d/%d apps%s %s(%s)%s\n' "$C_R" "$ready" "$n" "$C_0" "$C_D" "$(ui_mmss "$el")" "$C_0" >&7
-  [ -z "$bad" ] || printf '  %sDegraded:%s%s\n' "$C_Y" "$bad" "$C_0" >&7
-  [ -z "$pend" ] || printf '  %sNot ready:%s%s\n' "$C_D" "$pend" "$C_0" >&7
+  if [ "$UI_MODE" = fancy ]; then ui_line "$C_R" '■' "$ready/$n apps ready ${C_D}($(ui_mmss "$el"))" "$C_R"
+  else printf '✖ %d/%d apps ready (%s)\n' "$ready" "$n" "$(ui_mmss "$el")" >&7; fi
   wait_apps_timeout
 }
 
@@ -526,7 +611,7 @@ wait_apps_table() {  # --verbose: the original per-app table
 # access_box "<comps>" <domain>: URL / user / password of every enabled brick with a UI (charts in helm/).
 # Passwords are never printed: only the kubectl command that reads them. Standalone: access_box "$(enabled_components)" my.domain
 access_box() {
-  local comps=$1 d=$2 l w=0 bar
+  local comps=$1 d=$2
   local -a L=("kien/stack access ($d)" "")
   sec() { printf "kubectl -n %s get secret %s -o jsonpath='{.data.%s}' | base64 -d" "$1" "$2" "$3"; }
   L+=("ArgoCD     https://argocd.$d" "  user      admin" "  password  $(sec argocd argocd-initial-admin-secret password)")
@@ -537,18 +622,15 @@ access_box() {
     L+=("" "Grafana    https://grafana.$d" "  user      admin" "  password  $(sec monitoring grafana-admin admin-password)")
   fi
   if grep -qx hello <<<"$comps"; then L+=("" "hello      https://hello.$d" "  no login (sample nginx app)"); fi
-  for l in "${L[@]}"; do [ ${#l} -le $w ] || w=${#l}; done
-  printf -v bar '%*s' $((w + 2)) ''; bar=${bar// /─}
-  printf '┌%s┐\n' "$bar"; printf '│ %-*s │\n' "$w" "${L[0]}"; printf '├%s┤\n' "$bar"
-  for l in "${L[@]:2}"; do printf '│ %-*s │\n' "$w" "$l"; done
-  printf '└%s┘\n' "$bar"
+  ui_note "${L[0]}" "${L[@]:2}"
 }
 
 summary() {
   local d out; d=$(cfg .global.domain)
   log "Done. Access:"
-  out=$(access_box "$(enabled_components)" "$d")
-  printf '%s\n' "$out" | tee "$ROOT/kstack-access.txt"
+  out=$(UI_MODE=plain access_box "$(enabled_components)" "$d")
+  printf '%s\n' "$out" >"$ROOT/kstack-access.txt"
+  if [ "$UI_MODE" = fancy ]; then access_box "$(enabled_components)" "$d"; else printf '%s\n' "$out"; fi
   echo "  (saved to $ROOT/kstack-access.txt, no password inside)"
   echo "  Change anything: edit cluster.yaml or helm/*/<brick>/values.yaml in $(repo), push."
   [ "$(cfg .global.tls.issuer)" = selfsigned ] && echo "  (self-signed certificates: CA in cert-manager/selfsigned-ca)"
