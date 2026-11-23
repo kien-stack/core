@@ -44,7 +44,10 @@ cnpg-cluster:
     instances: 1
     annotations:
       argocd.argoproj.io/sync-options: SkipDryRunOnMissingResource=true
-      argocd.argoproj.io/sync-wave: "1"
+      # DB first: wave 0 with the ExternalSecrets it needs (infisical-cnpg role password);
+      # ArgoCD waits for it to be Healthy (built-in CNPG health check, ArgoCD >= 2.13)
+      # before syncing the Infisical workloads, Valkey and bootstrap Job (wave 1+).
+      argocd.argoproj.io/sync-wave: "0"
     storage:
       size: 5Gi
       storageClass: openebs-hostpath

@@ -6,6 +6,8 @@ argo-cd:
   configs:
     params:
       server.insecure: true
+      # Ordered deploy of the platform ApplicationSet (strategy RollingSync)
+      applicationsetcontroller.enable.progressive.syncs: true
     cm:
       resource.exclusions: |
         - apiGroups: [cilium.io]
