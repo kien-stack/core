@@ -310,6 +310,7 @@ YAML
   step GitOps "syncing from ${r} ($(rev))"
 
   tunnel_hint
+  hosts_hint
   printf '\n Deploying %s apps%s\n' "$n" "${C_D} (Ctrl+C is safe: ArgoCD keeps going)${C_0}"
   trap 'clr; printf "\n\n Stopped waiting: ArgoCD keeps deploying (kubectl -n argocd get applications)\n"; summary; exit 0' INT
   local rc=0; wait_apps "$comps" || rc=1
@@ -396,18 +397,22 @@ password() {
   else printf '%s\n' "$v"; fi
 }
 
+hosts_hint() {
+  local d h c; d=$(cfg .global.domain)
+  case "$d" in *.sslip.io|*.nip.io) ;; *) return 0 ;; esac   # real domain: DNS does the job
+  [ "$(uname -s)" = Darwin ] || [ -n "${WINDIR:-}" ] || return 0   # Linux reaches the node IP directly
+  h="argocd.$d"
+  for c in infisical:infisical monitoring:grafana; do grep -qx "${c%%:*}" <<<"$(enabled_components)" && h="$h ${c#*:}.$d"; done
+  printf '\n %s⚠%s No domain: on macOS the cluster IP is not reachable, add this line to /etc/hosts\n' "${C_Y}" "${C_0}"
+  printf '     echo "127.0.0.1 %s" | sudo tee -a /etc/hosts\n' "$h"
+  printf '   %sRemove it after uninstall: sudo sed -i "" "/%s/d" /etc/hosts%s\n' "${C_D}" "$d" "${C_0}"
+}
+
 tunnel_hint() {
   local l; l=$(kubectl get nodes -o jsonpath='{.items[0].metadata.labels}{.items[0].spec.providerID}' 2>/dev/null) || true
   case "$l" in
     *minikube.k8s.io*) printf '\n %s⚠%s minikube: run "minikube tunnel" in another terminal, or the URLs will not answer\n' "${C_Y}" "${C_0}"
-      # Docker driver on macOS/Windows: the node IP (sslip.io) is not reachable, the tunnel listens on 127.0.0.1
-      if [ "$(uname -s)" = Darwin ] || [ -n "${WINDIR:-}" ]; then
-        local d h; d=$(cfg .global.domain); h="argocd.$d"
-        for c in infisical:infisical monitoring:grafana; do grep -qx "${c%%:*}" <<<"$(enabled_components)" && h="$h ${c#*:}.$d"; done
-        printf '   %sOn macOS the cluster IP is not reachable: add this line to /etc/hosts%s\n' "${C_D}" "${C_0}"
-        printf '     echo "127.0.0.1 %s" | sudo tee -a /etc/hosts\n' "$h"
-        printf '   %sRemove it after uninstall: sudo sed -i "" "/%s/d" /etc/hosts%s\n' "${C_D}" "$d" "${C_0}"
-      fi ;;
+      ;;
     *kind://*) printf '\n %s⚠%s kind: Traefik needs a LoadBalancer IP (cloud-provider-kind), or the URLs will not answer\n' "${C_Y}" "${C_0}" ;;
   esac
 }
