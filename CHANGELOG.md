@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.4.0](https://github.com/kien-stack/essential/compare/v0.3.12...v0.4.0) (2026-11-23)
+
+
+### ⚠ BREAKING CHANGES
+
+* **apps:** remove the hello sample app, add examples/postgres-api + BOOTSTRAP-APP guide ([#64](https://github.com/kien-stack/essential/issues/64))
+
+### Features
+
+* **apps:** remove the hello sample app, add examples/postgres-api + BOOTSTRAP-APP guide ([#64](https://github.com/kien-stack/essential/issues/64)) ([bc1e9bc](https://github.com/kien-stack/essential/commit/bc1e9bc157a17360295ad55e9fa59b647d212824))
+* **install:** access box with URL/user/password commands per enabled brick ([#60](https://github.com/kien-stack/essential/issues/60)) ([53c2685](https://github.com/kien-stack/essential/commit/53c2685db1cb14f39d4660c5ce94bd150ae4f2b3))
+* **installer:** single install.sh (configure + install) ([#69](https://github.com/kien-stack/essential/issues/69)) ([acdeec1](https://github.com/kien-stack/essential/commit/acdeec1625e6ca08aa998a075da99ce621c8113f))
+* **monitoring:** add monitoring brick, planned Pro pack in docs ([#62](https://github.com/kien-stack/essential/issues/62)) ([fffbae9](https://github.com/kien-stack/essential/commit/fffbae9ead1114d5401e1158b351ce139cd42a5c))
+* **monitoring:** Grafana home dashboard = Kubernetes / Compute Resources / Cluster ([#66](https://github.com/kien-stack/essential/issues/66)) ([1aeae6a](https://github.com/kien-stack/essential/commit/1aeae6a4c092d999b9be352a595e22d4288e8488))
+* **monitoring:** VictoriaLogs explorer dashboard (25747) ([#68](https://github.com/kien-stack/essential/issues/68)) ([2023b30](https://github.com/kien-stack/essential/commit/2023b30336d67c654d8d5d4962312f33b228b34b))
+
 ## [0.3.12](https://github.com/kien-stack/essential/compare/v0.3.11...v0.3.12) (2026-11-22)
 
 
