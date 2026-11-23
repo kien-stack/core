@@ -6,7 +6,7 @@ One Git repo describes the whole cluster. You edit files and push, ArgoCD deploy
 
 ```text
 argocd/            declares the platform ApplicationSets (everything ArgoCD deploys for the platform)
-helm/platform/     platform bricks: one chart + values per component
+helm/platform/     platform components: one chart + values per component
 helm/apps/         your apps, one folder per app
 examples/          app charts to copy into helm/apps/
 scripts/           one-line install / try scripts
@@ -29,17 +29,17 @@ install.sh         bootstrap: doctor, install
 argocd/
   app-of-apps.yaml               root app: the repo/branch ArgoCD follows
   applications/
-    platform/appset.yaml         one Application per platform brick
-    platform/app-project.yaml    ArgoCD project of the bricks
+    platform/appset.yaml         one Application per platform component
+    platform/app-project.yaml    ArgoCD project of the components
     apps/appset.yaml             one Application per folder in helm/apps/
     apps/app-project.yaml        ArgoCD project of your apps
 ```
 
-Enabled bricks: argocd, traefik, cert-manager, external-secrets, openebs, cloudnative-pg, infisical, reloader, metrics-server.
+Enabled components: argocd, traefik, cert-manager, external-secrets, openebs, cloudnative-pg, infisical, reloader, metrics-server.
 
 Off by default: cilium, external-dns.
 
-The brick list lives in `argocd/applications/platform/appset.yaml`:
+The component list lives in `argocd/applications/platform/appset.yaml`:
 
 ```yaml
 generators:
@@ -51,13 +51,13 @@ generators:
         #   namespace: external-dns
 ```
 
-- **Disable a brick:** comment out its entry, push. ArgoCD removes it.
-- **Enable a brick:** uncomment its entry, push.
-- **Add a brick:** create `helm/platform/<app>/` (see below), add `- app: <app>` + `namespace:` to the list, push.
+- **Disable a component:** comment out its entry, push. ArgoCD removes it.
+- **Enable a component:** uncomment its entry, push.
+- **Add a component:** create `helm/platform/<app>/` (see below), add `- app: <app>` + `namespace:` to the list, push.
 
 ## helm/platform/
 
-Each brick wraps an upstream chart:
+Each component wraps an upstream chart:
 
 ```text
 helm/platform/traefik/
@@ -75,7 +75,7 @@ dependencies:
 
 - **Change settings:** edit `values.yaml` (keys go under the dependency name, e.g. `traefik:`), push.
 - **Bump the upstream chart:** change `version` in `Chart.yaml`, push.
-- **Cluster-wide settings** (domain, options): `cluster.yaml`, passed to every brick.
+- **Cluster-wide settings** (domain, options): `cluster.yaml`, passed to every component.
 
 ## helm/apps/
 
