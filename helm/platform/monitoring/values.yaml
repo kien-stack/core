@@ -63,9 +63,17 @@ kube-prometheus-stack:
             folder: Logs
             type: file
             disableDeletion: true
-            editable: false
+            editable: true
             options:
               path: /var/lib/grafana/dashboards/logs
+          - name: databases
+            orgId: 1
+            folder: Databases
+            type: file
+            disableDeletion: true
+            editable: true
+            options:
+              path: /var/lib/grafana/dashboards/databases
     dashboards:
       logs:
         victorialogs-explorer:
@@ -74,6 +82,14 @@ kube-prometheus-stack:
           datasource:
             - name: DS_VICTORIALOGS
               value: VictoriaLogs
+      databases:
+        # Grafana.com dashboard 20417 "CloudNativePG"
+        cloudnative-pg:
+          gnetId: 20417
+          revision: 4
+          datasource:
+            - name: DS_PROMETHEUS
+              value: Prometheus
   alertmanager:
     enabled: false
   prometheusOperator:
