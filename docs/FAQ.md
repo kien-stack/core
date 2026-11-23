@@ -24,7 +24,7 @@ All images are public (docker.io, quay.io, ghcr.io, registry.k8s.io).
 
 ## No domain name?
 
-Leave the domain empty in `scripts/install.sh`: it uses `<ip>.sslip.io` (free public DNS that resolves to the IP) with
+Leave the domain empty in `./install.sh`: it uses `<ip>.sslip.io` (free public DNS that resolves to the IP) with
 **self-signed** certificates (CA in `cert-manager/selfsigned-ca`), e.g. `https://argocd.192.168.1.240.sslip.io`.
 Your browser shows a warning until you import the CA.
 

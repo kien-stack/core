@@ -1,16 +1,20 @@
 #!/usr/bin/env bash
-# kien/stack Essential bootstrap (free, Apache-2.0). Run it once, from YOUR fork, after editing it:
+# kien/stack Essential installer (free, Apache-2.0). Run it from a clone of YOUR fork (or curl .../scripts/install.sh | bash).
+# First run (cluster.yaml still on example.com) asks a few questions, writes cluster.yaml + argocd/, commits and pushes.
+#   ./install.sh             configure if needed, then install (default)
+#   ./install.sh configure   ask the questions again, commit, push, install
 #   ./install.sh doctor      check the cluster and the repo
-#   ./install.sh install     install ArgoCD + apply argocd/app-of-apps.yaml (default)
+#   ./install.sh uninstall   ArgoCD apps, then ArgoCD (keeps namespaces/PVCs)
 # Everything it uses is in Git, nothing is generated:
 #   cluster.yaml             your settings (domain, TLS...), passed to every chart
 #   argocd/app-of-apps.yaml  the repo/branch ArgoCD follows (same URL in argocd/applications/*/appset.yaml)
-#   argocd/applications/platform/appset.yaml   bricks + namespace: comment out an entry to disable it
-# After that, ArgoCD applies whatever you push. https://raw.githubusercontent.com/kien-stack/essential/main/scripts/install.sh does the edits for you.
+#   argocd/applications/platform/appset.yaml   components + namespace: comment out an entry to disable it
+# After that, ArgoCD applies whatever you push.
+# Non-interactive: KSTACK_DOMAIN, KSTACK_EMAIL, KSTACK_IP, KSTACK_CILIUM, KSTACK_YES=1 (KSTACK_REPO/KSTACK_BRANCH: default = this clone).
 # Optional environment variables (secrets, never stored in Git):
 #   GIT_USERNAME / GIT_TOKEN          private GitOps repo (HTTPS)
 #   DNS01_API_TOKEN                   if global.tls.issuer=letsencrypt-dns01
-#   EXTERNAL_DNS_API_TOKEN            if the external-dns brick is enabled
+#   EXTERNAL_DNS_API_TOKEN            if the external-dns component is enabled
 set -euo pipefail
 
 ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
@@ -27,11 +31,11 @@ warn() { printf '  \033[33mWARN\033[0m %s\n' "$*"; }
 ko()   { printf '  \033[31mKO\033[0m   %s\n' "$*"; }
 die()  { printf '\033[31m[kien/stack] ERROR:\033[0m %s\n' "$*" >&2; exit 1; }
 
-usage() { sed -n '2,13p' "$0" | sed 's/^# \{0,1\}//'; }
+usage() { sed -n '2,17p' "$0" | sed 's/^# \{0,1\}//'; }
 
 while [ $# -gt 0 ]; do
   case "$1" in
-    doctor|install) CMD=$1 ;;
+    doctor|install|configure|uninstall) CMD=$1 ;;
     --pack) [ "${2:-}" = "$PACK" ] || die "this repo installs the $PACK pack"; shift ;;
     -h|--help) usage; exit 0 ;;
     *) usage; die "unknown argument: $1" ;;
@@ -48,7 +52,7 @@ run_timeout() { local t=$1; shift; if command -v timeout >/dev/null; then timeou
 b64() { base64 | tr -d '\n'; }
 randpw() { LC_ALL=C tr -dc 'A-Za-z0-9' </dev/urandom 2>/dev/null | head -c "${1:-24}" || true; }
 
-# Bricks ArgoCD will deploy: the entries of the platform ApplicationSet list, + helm/apps/*.
+# Components ArgoCD will deploy: the entries of the platform ApplicationSet list, + helm/apps/*.
 enabled_components() {
   local d
   yq -r '.spec.generators[0].list.elements[].app' "$APPSET"
@@ -241,7 +245,7 @@ install() {
   fi
 
   log "Installing ArgoCD (Helm, then self-managed by ArgoCD)"
-  # The HTTPRoute needs the Gateway API CRDs, installed later by the traefik brick:
+  # The HTTPRoute needs the Gateway API CRDs, installed later by the traefik component:
   # ArgoCD creates it when it takes itself over
   helm_bootstrap argocd argocd --set argo-cd.server.httproute.enabled=false
   ok "ArgoCD ready"
@@ -321,7 +325,7 @@ wait_apps() {
   return 1
 }
 
-# access_box "<comps>" <domain>: URL / user / password of every enabled brick with a UI (charts in helm/).
+# access_box "<comps>" <domain>: URL / user / password of every enabled component with a UI (charts in helm/).
 # Passwords are never printed: only the kubectl command that reads them. Standalone: access_box "$(enabled_components)" my.domain
 access_box() {
   local comps=$1 d=$2 l w=0 bar
@@ -348,13 +352,100 @@ summary() {
   out=$(access_box "$(enabled_components)" "$d")
   printf '%s\n' "$out" | tee "$ROOT/kstack-access.txt"
   echo "  (saved to $ROOT/kstack-access.txt, no password inside)"
-  echo "  Change anything: edit cluster.yaml or helm/*/<brick>/values.yaml in $(repo), push."
+  echo "  Change anything: edit cluster.yaml or helm/*/<component>/values.yaml in $(repo), push."
   [ "$(cfg .global.tls.issuer)" = selfsigned ] && echo "  (self-signed certificates: CA in cert-manager/selfsigned-ca)"
   return 0
+}
+
+# ---------------------------------------------------------------- configure (first run)
+# When cluster.yaml still has example.com (or ArgoCD does not follow this clone yet), or with `configure`:
+# ask a few questions, write cluster.yaml + argocd/, show the diff, commit and push. Never in demo mode (try.sh).
+ask() { # ask VAR "question" default
+  local v=${!1:-}
+  if [ -n "$v" ] || [ -n "${KSTACK_YES:-}" ] || ! { : </dev/tty; } 2>/dev/null; then printf -v "$1" %s "${v:-$3}"; return; fi
+  read -r -p "  $2 [${3:-none}]: " v </dev/tty || true; printf -v "$1" %s "${v:-$3}"
+}
+setup() {
+  local force=${1:-} origin branch
+  [ -z "${KSTACK_DEMO:-}" ] || return 0
+  origin=${KSTACK_REPO:-$(git -C "$ROOT" remote get-url origin 2>/dev/null)} || die "run install.sh from a git clone of your fork"
+  origin=$(sed -E "s#://[^@/]+@#://#" <<<"${origin%.git}.git")   # never write credentials into Git
+  case "$origin" in git@github.com:*) origin="https://github.com/${origin#git@github.com:}" ;; esac
+  branch=${KSTACK_BRANCH:-$(git -C "$ROOT" rev-parse --abbrev-ref HEAD)}
+  if [ -z "$force" ] && [ "$(repo)" = "$origin" ] && [ "$(rev)" = "$branch" ] \
+     && [ -n "$(cfg .global.domain)" ] && [ "$(cfg .global.domain)" != example.com ]; then
+    log "configured (cluster.yaml: $(cfg .global.domain)): installing as is (./install.sh configure to change)"; return 0
+  fi
+  case "$origin" in *kien-stack/essential*|*dedsxc/kien-stack-essential*) die "that is our public repo: use your fork (or scripts/try.sh for a demo)" ;; esac
+  kubectl version --request-timeout=10s >/dev/null 2>&1 || die "no reachable cluster in the current kubectl context.
+  No Kubernetes? k3s in one minute: curl -sfL https://get.k3s.io | INSTALL_K3S_EXEC=\"--disable traefik\" sh -"
+  log "context: $(kubectl config current-context). Configuring $origin ($branch). A few questions (Enter = default):"
+  local ip; ip=$(kubectl get nodes -o jsonpath='{.items[0].status.addresses[?(@.type=="InternalIP")].address}')
+  KSTACK_DOMAIN=${KSTACK_DOMAIN:-}; KSTACK_EMAIL=${KSTACK_EMAIL:-}; KSTACK_IP=${KSTACK_IP:-}; KSTACK_CILIUM=${KSTACK_CILIUM:-}
+  ask KSTACK_DOMAIN "Domain (empty = <ip>.sslip.io with self-signed certs)" ""
+  [ -z "$KSTACK_DOMAIN" ] || ask KSTACK_EMAIL "Email for Let's Encrypt (empty = self-signed)" ""
+  ask KSTACK_IP "IP your browser uses to reach the cluster (Traefik node / LB)" "$ip"
+  ask KSTACK_CILIUM "Install Cilium (only for a cluster created WITHOUT a CNI) true/false" false
+  local dom=${KSTACK_DOMAIN:-${KSTACK_IP}.sslip.io} tls=selfsigned is=selfsigned-ca
+  [ -z "$KSTACK_EMAIL" ] || { tls=letsencrypt-http01; is=letsencrypt; }
+
+  # 1. cluster.yaml: your settings
+  D="$dom" T="$tls" I="$is" E="${KSTACK_EMAIL:-admin@$dom}" yq -i '
+    .global.domain = strenv(D) | .global.tls.issuer = strenv(T) | .global.issuer = strenv(I) |
+    .global.tls.email = strenv(E)' "$CONFIG"
+  # 2. argocd/: ArgoCD follows your fork
+  R="$origin" B="$branch" yq -i '.spec.source.repoURL = strenv(R) | .spec.source.targetRevision = strenv(B)' "$APP"
+  local f; for f in "$ROOT"/argocd/applications/*/appset.yaml; do
+    R="$origin" B="$branch" yq -i '(.spec.generators[0] | select(has("git")) | .git) |= (.repoURL = strenv(R) | .revision = strenv(B)) |
+      .spec.template.spec.source.repoURL = strenv(R) | .spec.template.spec.source.targetRevision = strenv(B)' "$f"
+  done
+  # 3. components: entries of the list in the platform ApplicationSet
+  if [ "$KSTACK_CILIUM" = true ] && ! grep -qx cilium <<<"$(enabled_components)"; then
+    yq -i '.spec.generators[0].list.elements += [{"app": "cilium", "namespace": "kube-system"}]' "$APPSET"
+    IP="$KSTACK_IP" yq -i '.cilium.k8sServiceHost = strenv(IP) | .cilium.k8sServicePort = 6443 |
+      .cilium.ipam = {"mode": "cluster-pool", "operator": {"clusterPoolIPv4PodCIDRList": ["10.42.0.0/16"]}}' "$CONFIG"
+  fi
+  # k3s & co already run a metrics-server: do not deploy ours
+  if foreign_metrics_server; then
+    yq -i 'del(.spec.generators[0].list.elements[] | select(.app == "metrics-server"))' "$APPSET"
+  fi
+  [ "$tls" = selfsigned ] || log "Let's Encrypt HTTP-01: *.$dom must point to $KSTACK_IP, port 80 open from the Internet"
+
+  if [ -z "$(git -C "$ROOT" status --porcelain -- cluster.yaml argocd)" ]; then ok "nothing to change"; return 0; fi
+  log "changes to your fork:"; git -C "$ROOT" --no-pager diff --stat; git -C "$ROOT" --no-pager diff -- cluster.yaml argocd/app-of-apps.yaml
+  if [ -z "${KSTACK_YES:-}" ] && { : </dev/tty; } 2>/dev/null; then
+    local a; read -r -p "  Commit and push to $origin ($branch)? [Y/n]: " a </dev/tty || true
+    case "${a:-y}" in y|Y|yes) ;; *) die "nothing pushed. Your edited fork is in $ROOT: push it, then run ./install.sh there" ;; esac
+  fi
+  git -C "$ROOT" -c user.name="${GIT_AUTHOR_NAME:-kien-stack}" -c user.email="${GIT_AUTHOR_EMAIL:-kien-stack@localhost}" \
+    commit -qm "kien/stack: my settings (domain $dom)" -- cluster.yaml argocd || die "git commit failed"
+  local auth=()
+  [ -z "${GIT_TOKEN:-}" ] || auth=(-c "http.extraheader=Authorization: Basic $(printf '%s:%s' "${GIT_USERNAME:-git}" "$GIT_TOKEN" | b64)")
+  git -C "$ROOT" ${auth[@]+"${auth[@]}"} push -q origin "HEAD:$branch" || die "push failed (write access to $origin? set GIT_USERNAME/GIT_TOKEN). Your edited fork is in $ROOT"
+  ok "pushed: $(git -C "$ROOT" log -1 --format='%h %s')"
+}
+
+# ---------------------------------------------------------------- uninstall
+# Order matters: ArgoCD manages itself, so stop the self-management first or it deletes its own
+# controller and the remaining Applications hang on their finalizers.
+uninstall() {
+  log "Removing the platform (ArgoCD apps, then ArgoCD); namespaces, CRDs and PVCs are kept"
+  unfin() { kubectl -n argocd patch application "$1" --type merge -p '{"metadata":{"finalizers":null}}' >/dev/null 2>&1 || true; }
+  unfin app-of-apps; kubectl -n argocd delete application app-of-apps --ignore-not-found --wait=false >/dev/null 2>&1 || true
+  kubectl -n argocd delete applicationsets --all --cascade=orphan >/dev/null 2>&1 || true
+  unfin argocd; kubectl -n argocd delete application argocd --ignore-not-found >/dev/null 2>&1 || true
+  kubectl -n argocd delete applications --all --wait=true --timeout=5m || {
+    warn "some apps did not finish pruning: forcing"
+    for a in $(kubectl -n argocd get applications -o name 2>/dev/null); do unfin "${a#*/}"; done; }
+  kubectl -n argocd delete appprojects platform apps --ignore-not-found >/dev/null 2>&1 || true
+  helm uninstall argocd -n argocd --wait 2>/dev/null || true
+  ok "done (delete namespaces/PVCs with kubectl if you want)"
 }
 
 command -v yq >/dev/null 2>&1 || die "yq (mikefarah, v4) is required"
 case "$CMD" in
   doctor) doctor ;;
-  install) install ;;
+  install) setup; install ;;
+  configure) setup force; install ;;
+  uninstall) uninstall ;;
 esac

@@ -76,7 +76,7 @@ dom=$ip.sslip.io
 log "demo on context $(kubectl config current-context), https://*.$dom, release $REF"
 # A demo has no fork: ArgoCD reads OUR public repo at $REF (its cluster.yaml says example.com).
 # So, and ONLY in this demo, the root Application pins $REF and overrides global.domain.
-# A real install has none of this: https://raw.githubusercontent.com/kien-stack/essential/main/scripts/install.sh writes your settings into your fork.
+# A real install has none of this: ./install.sh writes your settings into your fork.
 D="$dom" yq -i '.global.domain = strenv(D)' cluster.yaml
 # k3s & co already run a metrics-server: do not deploy ours
 if [ -n "$(kubectl -n kube-system get deploy metrics-server -o jsonpath='{.spec.selector.matchLabels.k8s-app}' 2>/dev/null)" ]; then

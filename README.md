@@ -28,11 +28,13 @@ curl -fsSL https://raw.githubusercontent.com/kien-stack/essential/main/scripts/t
 ## Install
 
 1. [Fork this repo](https://github.com/kien-stack/essential/fork).
-2. Run the installer. It asks for your fork, domain and email:
+2. Run the installer (one script). First run asks for your fork, domain and email, commits and pushes:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/kien-stack/essential/main/scripts/install.sh | bash
 ```
+
+Or from your clone: `./install.sh` (`./install.sh configure` to change the answers).
 
 Requirements: a Kubernetes cluster (2 vCPU, 8 GB RAM), `kubectl`, `helm`, `git`.
 
