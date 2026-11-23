@@ -17,34 +17,67 @@ spec:
           # Required: the other bricks and your apps depend on them
           - app: argocd
             namespace: argocd
+            stage: "1"
           - app: traefik
             namespace: traefik
+            stage: "1"
           - app: cert-manager
             namespace: cert-manager
+            stage: "1"
           - app: external-secrets
             namespace: external-secrets
+            stage: "2"
           # Optional
           - app: openebs
             namespace: openebs
+            stage: "2"
           - app: cloudnative-pg
             namespace: cnpg-system
+            stage: "2"
           - app: infisical
             namespace: infisical
+            stage: "3"
           - app: reloader
             namespace: reloader
+            stage: "2"
           - app: metrics-server
             namespace: kube-system
+            stage: "2"
           # Prometheus + Grafana (https://grafana.<domain>) + VictoriaMetrics + VictoriaLogs
           - app: monitoring
             namespace: monitoring
+            stage: "4"
           # Off by default: uncomment to enable
           # - app: cilium
           #   namespace: kube-system
+          #   stage: "1"
           # - app: external-dns
           #   namespace: external-dns
+          #   stage: "1"
+  # Progressive sync: deploy in order, one stage after the other (a stage waits until the
+  # previous one is Healthy). Stage = the "stage" field of each element above.
+  # An empty stage (all its bricks disabled) is skipped.
+  strategy:
+    type: RollingSync
+    rollingSync:
+      steps:
+        # 1: network and certificates (argocd, traefik, cert-manager, cilium, external-dns)
+        - matchExpressions:
+            - {key: stage, operator: In, values: ["1"]}
+        # 2: operators and storage
+        - matchExpressions:
+            - {key: stage, operator: In, values: ["2"]}
+        # 3: secrets (infisical)
+        - matchExpressions:
+            - {key: stage, operator: In, values: ["3"]}
+        # 4: monitoring and anything else
+        - matchExpressions:
+            - {key: stage, operator: NotIn, values: ["1", "2", "3"]}
   template:
     metadata:
       name: "{{ .app }}"
+      labels:
+        stage: "{{ .stage }}"
       finalizers:
         - resources-finalizer.argocd.argoproj.io
     spec:

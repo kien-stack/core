@@ -405,7 +405,7 @@ setup() {
   done
   # 3. components: entries of the list in the platform ApplicationSet
   if [ "$KSTACK_CILIUM" = true ] && ! grep -qx cilium <<<"$(enabled_components)"; then
-    yq -i '.spec.generators[0].list.elements += [{"app": "cilium", "namespace": "kube-system"}]' "$APPSET"
+    yq -i '.spec.generators[0].list.elements += [{"app": "cilium", "namespace": "kube-system", "stage": "1"}]' "$APPSET"
     IP="$KSTACK_IP" yq -i '.cilium.k8sServiceHost = strenv(IP) | .cilium.k8sServicePort = 6443 |
       .cilium.ipam = {"mode": "cluster-pool", "operator": {"clusterPoolIPv4PodCIDRList": ["10.42.0.0/16"]}}' "$CONFIG"
   fi
