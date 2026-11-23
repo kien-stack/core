@@ -320,7 +320,8 @@ YAML
   tunnel_hint
   hosts_hint
   flush_warns
-  printf '\n Deploying %s apps%s\n' "$n" "${C_D} (Ctrl+C is safe: ArgoCD keeps going)${C_0}"
+  rule Deploy
+  printf ' %s apps%s\n' "$n" "${C_D} (Ctrl+C is safe: ArgoCD keeps going)${C_0}"
   trap 'clr; printf "\n\n Stopped waiting: ArgoCD keeps deploying (kubectl -n argocd get applications)\n"; summary; exit 0' INT
   local rc=0; wait_apps "$comps" || rc=1
   trap - INT
