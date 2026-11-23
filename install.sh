@@ -254,8 +254,6 @@ install() {
   # ArgoCD creates it when it takes itself over
   helm_bootstrap argocd argocd --set argo-cd.server.httproute.enabled=false
   ok "ArgoCD ready"
-  local pw; pw=$(kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath='{.data.password}' 2>/dev/null | base64 -d 2>/dev/null || true)
-  log "ArgoCD login: admin / ${pw:-<see argocd-initial-admin-secret>}"
   log "  UI now (no ingress needed): kubectl -n argocd port-forward svc/argocd-server 8080:443  ->  https://localhost:8080"
 
   if [ -n "${GIT_TOKEN:-}" ]; then
@@ -279,8 +277,10 @@ YAML
   kubectl apply -f "$APP" >/dev/null
   ok "ArgoCD now syncs from $(repo) ($(rev)): push to change the platform"
 
-  wait_apps "$comps"
+  # Logins first: URLs and password commands are known now, the apps can take a while
   summary
+  trap 'echo; log "Stopped waiting (ArgoCD keeps deploying). Logins: $ROOT/kstack-access.txt"; exit 0' INT
+  if wait_apps "$comps"; then trap - INT; ok "Logins above, also in $ROOT/kstack-access.txt"; else trap - INT; return 1; fi
 }
 
 wait_apps() {
@@ -352,7 +352,7 @@ access_box() {
 
 summary() {
   local d out; d=$(cfg .global.domain)
-  printf '%s[kien/stack] Done. Access:%s\n' "${C_G}" "${C_0}"
+  printf '%s[kien/stack] Access (apps keep deploying below):%s\n' "${C_G}" "${C_0}"
   out=$(access_box "$(enabled_components)" "$d")
   printf '%s\n' "$out" | tee "$ROOT/kstack-access.txt"
   printf '%s  (saved to %s/kstack-access.txt, no password inside)%s\n' "${C_D}" "${ROOT}" "${C_0}"
