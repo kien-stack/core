@@ -16,6 +16,9 @@ kube-prometheus-stack:
     grafana.ini:
       server:
         root_url: https://grafana.{{ .Values.global.domain }}
+      # Home page = Kubernetes / Compute Resources / Cluster (users can still pick their own)
+      dashboards:
+        default_home_dashboard_path: /tmp/dashboards/k8s-resources-cluster.json
     resources:
       requests: {cpu: 50m, memory: 128Mi}
       limits: {memory: 768Mi}  # 384Mi OOMKilled at first start, ~300-470Mi steady
