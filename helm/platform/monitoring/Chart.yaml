@@ -1,0 +1,23 @@
+apiVersion: v2
+name: monitoring
+description: kien/stack monitoring (wraps the upstream charts)
+type: application
+version: 0.1.0
+dependencies:
+  - name: kube-prometheus-stack
+    repository: https://prometheus-community.github.io/helm-charts
+    version: 92.17.0
+  # Long-term metrics: Prometheus remote-writes here, Grafana reads from here
+  - name: victoria-metrics-single
+    repository: https://victoriametrics.github.io/helm-charts/
+    condition: victoria-metrics-single.enabled
+    version: 0.51.0
+  # Logs: storage + a collector DaemonSet that ships every pod log to it
+  - name: victoria-logs-single
+    repository: https://victoriametrics.github.io/helm-charts/
+    condition: victoria-logs-single.enabled
+    version: 0.13.13
+  - name: victoria-logs-collector
+    repository: https://victoriametrics.github.io/helm-charts/
+    condition: victoria-logs-collector.enabled
+    version: 0.3.9
