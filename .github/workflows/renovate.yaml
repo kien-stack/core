@@ -3,7 +3,7 @@ name: "Renovate"
 
 # Self-hosted Renovate. Not needed if the Mend Renovate GitHub App is installed on the repo.
 # Requires the repository secret RENOVATE_TOKEN (fine-grained PAT: contents, pull requests,
-# issues, workflows = read/write on this repo). Without it the job is skipped. See docs/CI.md.
+# issues, workflows = read/write on this repo). Without it the job is skipped.
 
 on:
   schedule:
@@ -47,7 +47,7 @@ jobs:
     steps:
       - name: Skip if RENOVATE_TOKEN is missing
         if: env.HAS_TOKEN != 'true'
-        run: echo "::notice::RENOVATE_TOKEN secret not set, skipping self-hosted Renovate (see docs/CI.md)"
+        run: echo "::notice::RENOVATE_TOKEN secret not set, skipping self-hosted Renovate"
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         if: env.HAS_TOKEN == 'true'
       - name: Renovate

@@ -1,7 +1,6 @@
 // Renovate config for kien/stack Essential (and your fork).
 // Works with the Mend Renovate GitHub App (just install it on your fork)
 // or with the self-hosted workflow .github/workflows/renovate.yaml (needs secret RENOVATE_TOKEN).
-// See docs/CI.md.
 {
   $schema: 'https://docs.renovatebot.com/renovate-schema.json',
   extends: [

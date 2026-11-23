@@ -125,4 +125,4 @@
 
 ### Features
 
-* app Postgres via cnpg-cluster chart, password ClusterGenerator, Reloader brick ([#4](https://github.com/dedsxc/kien-stack-essential/issues/4)) ([a0af69f](https://github.com/dedsxc/kien-stack-essential/commit/a0af69f0ffc5ccba4bd1f889f99904181dd23b87))
+* app Postgres via cnpg-cluster chart, password ClusterGenerator, Reloader component ([#4](https://github.com/dedsxc/kien-stack-essential/issues/4)) ([a0af69f](https://github.com/dedsxc/kien-stack-essential/commit/a0af69f0ffc5ccba4bd1f889f99904181dd23b87))
