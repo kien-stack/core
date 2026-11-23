@@ -343,11 +343,8 @@ access_box() {
   if grep -qx monitoring <<<"$comps"; then
     L+=("" "Grafana    https://grafana.$d" "  user      admin" "  password  $(sec monitoring grafana-admin admin-password)")
   fi
-  for l in "${L[@]}"; do [ ${#l} -le $w ] || w=${#l}; done
-  printf -v bar '%*s' $((w + 2)) ''; bar=${bar// /─}
-  printf '┌%s┐\n' "$bar"; printf '│ %-*s │\n' "$w" "${L[0]}"; printf '├%s┤\n' "$bar"
-  for l in "${L[@]:2}"; do printf '│ %-*s │\n' "$w" "$l"; done
-  printf '└%s┘\n' "$bar"
+  printf '%s\n' "${L[0]}"
+  for l in "${L[@]:2}"; do printf '  %s\n' "$l"; done
 }
 
 summary() {
