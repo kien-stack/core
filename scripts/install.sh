@@ -95,15 +95,15 @@ p_intro() {  # p_intro <Pack name> [<repo dir for the version>]
   local v; v=$(p__ver "${2:-}")
   P_BUF="" P_NL=0
   if [ -n "$P_FANCY" ]; then
-    if [ -z "${UI_HEAD:-}" ]; then p__ln "$P_GY┌" "" 0 "kien/stack · $1${v:+ $v}" ""; printf '%s' "$P_BUF" >&6; fi
-    p__ln "$P_GY│" "" 0 "Answer a few questions. Enter keeps the default." "$P_DI"; p__ln "$P_GY│" "" 0 "" ""
+    if [ -z "${UI_HEAD:-}" ]; then p__ln "${P_GY}┌" "" 0 "kien/stack · $1${v:+ $v}" ""; printf '%s' "$P_BUF" >&6; fi
+    p__ln "${P_GY}│" "" 0 "Answer a few questions. Enter keeps the default." "$P_DI"; p__ln "${P_GY}│" "" 0 "" ""
     printf '%s' "$P_BUF" >&6
   else printf 'kien/stack - %s%s\nAnswer a few questions. Enter keeps the default.\n\n' "$1" "${v:+ $v}" >&6; fi
 }
 p_outro() {  # p_outro <text>: last line of the questions, then p_end
   if [ -n "$P_ON" ]; then
     P_BUF="" P_NL=0
-    if [ -n "$P_FANCY" ]; then p__ln "$P_GY└" "" 0 "$1" ""; printf '%s' "$P_BUF" >&6; else printf '%s\n' "$1" >&6; fi
+    if [ -n "$P_FANCY" ]; then p__ln "${P_GY}└" "" 0 "$1" ""; printf '%s' "$P_BUF" >&6; else printf '%s\n' "$1" >&6; fi
   fi
   p_end
 }
@@ -130,19 +130,19 @@ p__render() {
   esac
   p__ln "$sc$s" "" 0 "$P_Q" ""
   if [ "$P_ST" = ok ] || [ "$P_ST" = cancel ]; then
-    p__ln "$bc│" "" 0 "$P_ANS" "$P_DI"
-    if [ "$P_ST" = ok ]; then p__ln "$bc│" "" 0 "" ""; fi
+    p__ln "${bc}│" "" 0 "$P_ANS" "$P_DI"
+    if [ "$P_ST" = ok ]; then p__ln "${bc}│" "" 0 "" ""; fi
   else
     case "$P_T" in
       text|secret)
         t=$P_V; if [ "$P_T" = secret ]; then t=$(printf '%*s' "${#P_V}" '' | tr ' ' '*'); fi
         m=$(( P_COLS - 6 ))
         if [ "$m" -lt 2 ]; then t=""; elif [ "${#t}" -gt "$m" ]; then t="…${t:$(( ${#t} - m + 1 ))}"; fi
-        if [ -z "$t" ] && [ -n "$P_DEF" ]; then p__ln "$bc│" "$P_IN${P_DEF:0:1}$P_0" 1 "${P_DEF:1}" "$P_DI"
-        else p__ln "$bc│" "" 0 "$t" "" "$P_IN $P_0"; fi ;;
+        if [ -z "$t" ] && [ -n "$P_DEF" ]; then p__ln "${bc}│" "$P_IN${P_DEF:0:1}$P_0" 1 "${P_DEF:1}" "$P_DI"
+        else p__ln "${bc}│" "" 0 "$t" "" "$P_IN $P_0"; fi ;;
       confirm)
-        if [ "$P_I" = 0 ]; then p__ln "$bc│" "" 0 "${P_GR}●$P_0 Yes $P_DI/ ○ No" ""
-        else p__ln "$bc│" "" 0 "${P_DI}○ Yes /$P_0 ${P_GR}●$P_0 No" ""; fi ;;
+        if [ "$P_I" = 0 ]; then p__ln "${bc}│" "" 0 "${P_GR}●$P_0 Yes $P_DI/ ○ No" ""
+        else p__ln "${bc}│" "" 0 "${P_DI}○ Yes /$P_0 ${P_GR}●$P_0 No" ""; fi ;;
       *)
         m=$(( P_ROWS - 5 )); if [ "$m" -lt 3 ]; then m=3; fi
         first=0 last=$(( ${#P_OL[@]} - 1 ))
@@ -151,22 +151,22 @@ p__render() {
           if [ $(( first + m - 1 )) -gt "$last" ]; then first=$(( last - m + 1 )); fi
           last=$(( first + m - 1 ))
         fi
-        if [ "$first" -gt 0 ]; then p__ln "$bc│" "" 0 "…" "$P_DI"; fi
+        if [ "$first" -gt 0 ]; then p__ln "${bc}│" "" 0 "…" "$P_DI"; fi
         i=$first
         while [ "$i" -le "$last" ]; do
           if [ "$P_T" = select ]; then
-            if [ "$i" = "$P_I" ]; then p__ln "$bc│" "${P_GR}●$P_0 " 2 "${P_OL[i]}" ""
-            else p__ln "$bc│" "${P_DI}○$P_0 " 2 "${P_OL[i]}" "$P_DI"; fi
+            if [ "$i" = "$P_I" ]; then p__ln "${bc}│" "${P_GR}●$P_0 " 2 "${P_OL[i]}" ""
+            else p__ln "${bc}│" "${P_DI}○$P_0 " 2 "${P_OL[i]}" "$P_DI"; fi
           else
             if [ "${P_OS[i]}" = 1 ]; then t="${P_GR}◼$P_0 "; elif [ "$i" = "$P_I" ]; then t="${P_CY}◻$P_0 "; else t="${P_DI}◻$P_0 "; fi
-            if [ "$i" = "$P_I" ]; then p__ln "$bc│" "$t" 2 "${P_OL[i]}" ""; else p__ln "$bc│" "$t" 2 "${P_OL[i]}" "$P_DI"; fi
+            if [ "$i" = "$P_I" ]; then p__ln "${bc}│" "$t" 2 "${P_OL[i]}" ""; else p__ln "${bc}│" "$t" 2 "${P_OL[i]}" "$P_DI"; fi
           fi
           i=$(( i + 1 ))
         done
-        if [ "$last" -lt $(( ${#P_OL[@]} - 1 )) ]; then p__ln "$bc│" "" 0 "…" "$P_DI"; fi
-        if [ "$P_T" = multi ] && [ "$P_ST" != error ]; then p__ln "$bc│" "" 0 "space: toggle, a: all, enter: confirm" "$P_DI"; fi ;;
+        if [ "$last" -lt $(( ${#P_OL[@]} - 1 )) ]; then p__ln "${bc}│" "" 0 "…" "$P_DI"; fi
+        if [ "$P_T" = multi ] && [ "$P_ST" != error ]; then p__ln "${bc}│" "" 0 "space: toggle, a: all, enter: confirm" "$P_DI"; fi ;;
     esac
-    if [ "$P_ST" = error ]; then p__ln "$P_YE└" "" 0 "▲  $P_ERR" "$P_YE"; else p__ln "$bc└" "" 0 "" ""; fi
+    if [ "$P_ST" = error ]; then p__ln "${P_YE}└" "" 0 "▲  $P_ERR" "$P_YE"; else p__ln "${bc}└" "" 0 "" ""; fi
   fi
   if [ "$P_PREV" -gt 0 ]; then printf '\033[%dA' "$P_PREV" >&6; fi
   printf '\r\033[J%s' "$P_BUF" >&6

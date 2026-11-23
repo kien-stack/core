@@ -204,7 +204,7 @@ ui_apps() {
       *)         sym=$f col=$C_C ;;
     esac
     a=$(printf '%-*s %s' "$w" "$a" "$st")
-    out="$out$C_GY│$C_0  $col$sym$C_0 $tc$(ui_fit "$a" $(( UI_COLS - 6 )))$C_0"$'\033[K\n'
+    out="$out${C_GY}│$C_0  $col$sym$C_0 $tc$(ui_fit "$a" $(( UI_COLS - 6 )))$C_0"$'\033[K\n'
   done
   if [ "$UI_APPS" -gt 0 ]; then printf '\033[%dA' "$UI_APPS" >&7; fi
   printf '\r%s' "$out" >&7; UI_APPS=$#
