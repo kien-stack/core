@@ -321,12 +321,10 @@ YAML
 wait_apps() {
   # ArgoCD deploys every app in parallel; this shows each app's status until all are ready (no time limit by
   # default, ARGOCD_TIMEOUT=<seconds> to cap it). Ctrl+C is safe: ArgoCD keeps deploying.
-  # Terminal: compact grid redrawn in place when a status changes. CI/pipe: one line per change.
-  local comps=$1 timeout=${ARGOCD_TIMEOUT%s} apps a n=0 w=8 cols=${COLUMNS:-0} per start=$SECONDS
+  # Terminal: one line per app, redrawn in place when a status changes. CI/pipe: one line per change.
+  local comps=$1 timeout=${ARGOCD_TIMEOUT%s} apps a n=0 w=8 start=$SECONDS
   apps="app-of-apps $comps"
   for a in $apps; do n=$((n + 1)); if [ ${#a} -gt $w ]; then w=${#a}; fi; done
-  [ "$cols" -gt 0 ] 2>/dev/null || cols=$(tput cols 2>/dev/null || echo 80)
-  per=$(( (cols - 3) / (w + 4) )); [ "$per" -ge 1 ] || per=1
   local rc=0 prev="" lines=0 el=0 j st data out cell sym pending
   local -a last=()
   while :; do
@@ -343,15 +341,14 @@ wait_apps() {
         *)              sym="${C_D}◌${C_0}" st=$(tr '[:upper:]' '[:lower:]' <<<"${st#*/}"); pending=$((pending + 1)) ;;
       esac
       if [ -n "$TTY" ]; then
-        printf -v cell ' %s %-*s ' "$sym" "$w" "$a"; out+=$cell
-        if [ $(( j % per )) -eq 0 ] || [ "$j" -eq "$n" ]; then out+=$'\033[K\n  '; fi
+        printf -v cell '   %s %-*s %s\033[K\n' "$sym" "$w" "$a" "$st"; out+=$cell
       elif [ "${last[j]:-}" != "$st" ]; then
         printf '   %s %-*s %s\n' "$sym" "$w" "$a" "$st"; last[j]=$st
       fi
     done
     if [ -n "$TTY" ] && [ "$out" != "$prev" ]; then
-      if [ "$lines" -gt 0 ]; then printf '\r\033[%dA' "$lines"; fi
-      printf '  %s\r' "${out%  }"; prev=$out; lines=$(( (n + per - 1) / per ))
+      if [ "$lines" -gt 0 ]; then printf '\033[%dA' "$lines"; fi
+      printf '%s' "$out"; prev=$out; lines=$n
     fi
     if [ "$pending" -eq 0 ]; then break; fi
     if [ "${timeout:-0}" -gt 0 ] && [ "$el" -ge "$timeout" ]; then rc=1; break; fi
