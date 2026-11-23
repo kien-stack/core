@@ -38,19 +38,30 @@ Or from your clone: `./install.sh` (`./install.sh configure` to change the answe
 
 Requirements: a Kubernetes cluster (2 vCPU, 8 GB RAM), `kubectl`, `helm`, `git`.
 
-### Private repo (GitLab, Gitea, private GitHub fork...)
+### Private repo
 
-Give the installer a token with read and write access to your repo (it commits and pushes your answers, and ArgoCD uses it to read the repo):
+If your fork is private (GitLab, Gitea, private GitHub...), the installer needs a token to clone and push it.
 
-```bash
-export GIT_USERNAME=<your user> GIT_TOKEN=<your token>
-curl -fsSL https://raw.githubusercontent.com/kien-stack/essential/main/scripts/install.sh | bash
-```
+1. Create a token with read and write access to the repo:
 
-- GitLab: personal or project access token with `read_repository` and `write_repository`.
-- GitHub: fine-grained token with Contents: read and write on your fork.
-- `export` matters: `GIT_TOKEN=... curl ... | bash` only passes the token to `curl`, not to the installer.
-- Without a token, a private repo fails with "repository not found" (the server hides it).
+   | Host | Token | Permissions |
+   |---|---|---|
+   | GitLab | Personal or project access token | `read_repository`, `write_repository` |
+   | GitHub | Fine-grained personal access token | Contents: Read and write (on your fork) |
+
+2. Export it, then run the installer:
+
+   ```bash
+   export GIT_USERNAME=<your-user>
+   export GIT_TOKEN=<your-token>
+   curl -fsSL https://raw.githubusercontent.com/kien-stack/essential/main/scripts/install.sh | bash
+   ```
+
+> [!NOTE]
+> Use `export`. With `GIT_TOKEN=... curl ... | bash`, only `curl` gets the token, not the installer.
+
+> [!TIP]
+> `repository not found` on a repo that exists usually means a missing or invalid token: private repos are hidden without one.
 
 ## Use it
 
