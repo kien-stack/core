@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.4.1](https://github.com/kien-stack/essential/compare/v0.4.0...v0.4.1) (2026-11-23)
+
+
+### Features
+
+* **install:** friendlier output, logins only when ready, never print passwords ([#72](https://github.com/kien-stack/essential/issues/72)) ([0379f53](https://github.com/kien-stack/essential/commit/0379f536890b46c4a7d9f956d349f191a24d876c))
+
 ## [0.4.0](https://github.com/kien-stack/essential/compare/v0.3.12...v0.4.0) (2026-11-23)
 
 
