@@ -38,6 +38,20 @@ Or from your clone: `./install.sh` (`./install.sh configure` to change the answe
 
 Requirements: a Kubernetes cluster (2 vCPU, 8 GB RAM), `kubectl`, `helm`, `git`.
 
+### Private repo (GitLab, Gitea, private GitHub fork...)
+
+Give the installer a token with read and write access to your repo (it commits and pushes your answers, and ArgoCD uses it to read the repo):
+
+```bash
+export GIT_USERNAME=<your user> GIT_TOKEN=<your token>
+curl -fsSL https://raw.githubusercontent.com/kien-stack/essential/main/scripts/install.sh | bash
+```
+
+- GitLab: personal or project access token with `read_repository` and `write_repository`.
+- GitHub: fine-grained token with Contents: read and write on your fork.
+- `export` matters: `GIT_TOKEN=... curl ... | bash` only passes the token to `curl`, not to the installer.
+- Without a token, a private repo fails with "repository not found" (the server hides it).
+
 ## Use it
 
 | I want to | Do this, then `git push` |
