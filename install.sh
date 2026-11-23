@@ -353,6 +353,9 @@ summary() {
   out=$(access_box "$(enabled_components)" "$d")
   printf '%s\n' "$out" | tee "$ROOT/kstack-access.txt"
   printf '%s  Saved to kstack-access.txt (no passwords)%s\n' "${C_D}" "${C_0}"
+  if kubectl get nodes -o jsonpath='{.items[0].metadata.labels}{.items[0].spec.providerID}' 2>/dev/null | grep -qE 'minikube.k8s.io|kind://'; then
+    printf '%s  minikube/kind: run "minikube tunnel" in another terminal, or the URLs will not answer%s\n' "${C_Y}" "${C_0}"
+  fi
   [ -n "${KSTACK_DEMO:-}" ] || echo "  To change anything: edit cluster.yaml or helm/, then git push"
   return 0
 }
