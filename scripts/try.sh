@@ -9,8 +9,13 @@ set -euo pipefail
 REPO=${KSTACK_SOURCE:-https://github.com/kien-stack/essential}
 REF=${KSTACK_REF:-main}
 DIR=${KSTACK_DIR:-$HOME/kien-stack-try}
-log() { printf '\033[1;35m[kien/stack]\033[0m %s\n' "$*"; }
-die() { printf '\033[31merror:\033[0m %s\n' "$*" >&2; exit 1; }
+# colors: only on a TTY, honour NO_COLOR and TERM=dumb (bash 3.2 safe)
+kc() { [ -t "$1" ] && [ -z "${NO_COLOR:-}" ] && [ "${TERM:-dumb}" != dumb ]; }
+# shellcheck disable=SC2034
+if kc 1; then C_H=$'\033[1;36m' C_G=$'\033[32m' C_Y=$'\033[33m' C_R=$'\033[31m' C_D=$'\033[2m' C_0=$'\033[0m'; else C_H='' C_G='' C_Y='' C_R='' C_D='' C_0=''; fi
+if kc 2; then E_R=$'\033[1;31m' E_0=$'\033[0m'; else E_R='' E_0=''; fi
+log() { printf '%s[kien/stack]%s %s\n' "${C_H}" "${C_0}" "$*"; }
+die() { printf '%serror:%s %s\n' "${E_R}" "${E_0}" "$*" >&2; exit 1; }
 ask() { # ask VAR "question" default
   local v=${!1:-}; if [ -n "$v" ] || [ -n "${KSTACK_YES:-}" ] || [ ! -r /dev/tty ]; then printf -v "$1" %s "${v:-$3}"; return; fi
   read -r -p "  $2 [${3:-none}]: " v </dev/tty || true; printf -v "$1" %s "${v:-$3}"
@@ -27,7 +32,7 @@ fi
 kubectl version --request-timeout=10s >/dev/null 2>&1 || die "no reachable cluster in the current kubectl context.
   No Kubernetes? k3s in one minute: curl -sfL https://get.k3s.io | INSTALL_K3S_EXEC=\"--disable traefik\" sh -"
 
-if [ -d "$DIR/src/.git" ]; then git -C "$DIR/src" fetch -q origin "$REF" && git -C "$DIR/src" checkout -q FETCH_HEAD
+if [ -d "$DIR/src/.git" ]; then git -C "$DIR/src" fetch -q origin "$REF" && git -C "$DIR/src" checkout -qf FETCH_HEAD
 else mkdir -p "$DIR"; git -c advice.detachedHead=false clone -q --depth 1 -b "$REF" "$REPO" "$DIR/src"; fi
 cd "$DIR/src"
 
@@ -76,7 +81,7 @@ dom=$ip.sslip.io
 log "demo on context $(kubectl config current-context), https://*.$dom, release $REF"
 # A demo has no fork: ArgoCD reads OUR public repo at $REF (its cluster.yaml says example.com).
 # So, and ONLY in this demo, the root Application pins $REF and overrides global.domain.
-# A real install has none of this: https://raw.githubusercontent.com/kien-stack/essential/main/scripts/install.sh writes your settings into your fork.
+# A real install has none of this: ./install.sh writes your settings into your fork.
 D="$dom" yq -i '.global.domain = strenv(D)' cluster.yaml
 # k3s & co already run a metrics-server: do not deploy ours
 if [ -n "$(kubectl -n kube-system get deploy metrics-server -o jsonpath='{.spec.selector.matchLabels.k8s-app}' 2>/dev/null)" ]; then
