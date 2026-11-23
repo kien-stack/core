@@ -1,0 +1,14 @@
+# Example: HTTP API on its own PostgreSQL (CloudNativePG), credentials injected as env vars.
+# NOT deployed: copy this folder to helm/apps/<your-app>, rename, push. Guide: docs/BOOTSTRAP-APP.md
+apiVersion: v2
+name: postgres-api
+type: application
+version: 0.1.0
+dependencies:
+  - name: app-template
+    repository: oci://ghcr.io/dedsxc
+    version: 2.0.0
+  # Postgres: CloudNativePG Cluster + Database + generated password (needs the cloudnative-pg and external-secrets bricks)
+  - name: cnpg-cluster
+    repository: oci://ghcr.io/dedsxc
+    version: 5.0.0
