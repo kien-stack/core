@@ -38,6 +38,9 @@ infisical-standalone:
 # storageClass: openebs-hostpath (installed by Essential). Cloud cluster: put its StorageClass here.
 cnpg-cluster:
   cluster:
+    # PodMonitor: CNPG metrics to Prometheus (Grafana "Databases/CloudNativePG" dashboard)
+    podMonitor:
+      enabled: true
     instances: 1
     annotations:
       argocd.argoproj.io/sync-options: SkipDryRunOnMissingResource=true

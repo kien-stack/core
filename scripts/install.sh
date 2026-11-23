@@ -114,6 +114,6 @@ cat <<TXT
   Your fork: $SRC (cluster.yaml = your settings). Edit, commit, push: ArgoCD applies it.
   Our updates: merge new kien-stack-essential releases into your fork.
 
-  Private AI, monitoring, SSO, rollouts: https://shop.kien.cc
+  AI Platform, Pro (SSO, backups, rollouts): https://shop.kien.cc
   Remove: curl -fsSL https://raw.githubusercontent.com/kien-stack/essential/main/scripts/install.sh | bash -s uninstall
 TXT

@@ -1,0 +1,189 @@
+# kube-prometheus-stack: Prometheus + Grafana + node-exporter + kube-state-metrics.
+# VictoriaMetrics keeps the metrics (Prometheus remote-writes, short local retention), VictoriaLogs keeps the pod logs.
+# Grafana: datasource "Prometheus" reads VictoriaMetrics, datasource "VictoriaLogs" reads the logs.
+# Grafana admin: secret monitoring/grafana-admin (ExternalSecret, templates/secrets.yaml), local login only (no SSO in
+# Essential). Exposed with Gateway API (grafana.route below, listener https-grafana: "grafana" in global.gatewayHosts).
+# Sized for small clusters (docs/FAQ.md: 2 vCPU, 6-8 GB): ~0.3 vCPU / 1 GiB requested, ~1.5 GiB used.
+# Bigger cluster or more history: raise the requests/limits, retention and PV sizes below.
+kube-prometheus-stack:
+  fullnameOverride: monitoring
+  grafana:
+    fullnameOverride: monitoring-grafana
+    admin:
+      existingSecret: grafana-admin
+      userKey: admin-user
+      passwordKey: admin-password
+    grafana.ini:
+      server:
+        root_url: https://grafana.{{ .Values.global.domain }}
+      # Home page = Kubernetes / Compute Resources / Cluster (users can still pick their own)
+      dashboards:
+        default_home_dashboard_path: /tmp/dashboards/k8s-resources-cluster.json
+    resources:
+      requests: {cpu: 50m, memory: 128Mi}
+      limits: {memory: 768Mi}  # 384Mi OOMKilled at first start, ~300-470Mi steady
+    ingress:
+      enabled: false
+    plugins:
+      - victoriametrics-logs-datasource
+    sidecar:
+      # dashboard/datasource watchers (2 containers)
+      resources:
+        requests: {cpu: 10m, memory: 48Mi}
+        limits: {memory: 128Mi}
+      datasources:
+        # Default "Prometheus" datasource: VictoriaMetrics (PromQL compatible, longer history)
+        url: http://monitoring-victoria-metrics-single-server:8428
+    additionalDataSources:
+      - name: VictoriaLogs
+        type: victoriametrics-logs-datasource
+        access: proxy
+        url: http://monitoring-victoria-logs-single-server:9428
+    # https://grafana.<domain>: listener https-grafana of the cluster Gateway gives the hostname
+    route:
+      main:
+        enabled: true
+        parentRefs:
+          - group: gateway.networking.k8s.io
+            kind: Gateway
+            name: traefik
+            namespace: traefik
+            sectionName: https-grafana
+    # Grafana.com dashboard 25747 "VictoriaLogs - Explorer for Kubernetes logs", downloaded at startup,
+    # its DS_VICTORIALOGS input mapped to the "VictoriaLogs" datasource above.
+    # One provider = one Grafana folder. Its name, the end of its path and the key under
+    # `dashboards:` must match. Add a grafana.com dashboard under that key:
+    #   my-dashboard: { gnetId: <id from the URL>, revision: <n> }
+    dashboardProviders:
+      dashboardproviders.yaml:
+        apiVersion: 1
+        providers:
+          - name: logs
+            orgId: 1
+            folder: Logs
+            type: file
+            disableDeletion: true
+            editable: true
+            options:
+              path: /var/lib/grafana/dashboards/logs
+          - name: databases
+            orgId: 1
+            folder: Databases
+            type: file
+            disableDeletion: true
+            editable: true
+            options:
+              path: /var/lib/grafana/dashboards/databases
+    dashboards:
+      logs:
+        victorialogs-explorer:
+          gnetId: 25747
+          revision: 1
+          datasource:
+            - name: DS_VICTORIALOGS
+              value: VictoriaLogs
+      databases:
+        # Grafana.com dashboard 20417 "CloudNativePG"
+        cloudnative-pg:
+          gnetId: 20417
+          revision: 4
+          datasource:
+            - name: DS_PROMETHEUS
+              value: Prometheus
+  alertmanager:
+    enabled: false
+  prometheusOperator:
+    resources:
+      requests: {cpu: 20m, memory: 64Mi}
+      limits: {memory: 192Mi}
+  kube-state-metrics:
+    resources:
+      requests: {cpu: 10m, memory: 48Mi}
+      limits: {memory: 192Mi}
+  # DaemonSet: one per node
+  prometheus-node-exporter:
+    resources:
+      requests: {cpu: 10m, memory: 24Mi}
+      limits: {memory: 64Mi}
+  # Not reachable on most managed / single-node clusters
+  kubeEtcd:
+    enabled: false
+  kubeControllerManager:
+    enabled: false
+  kubeScheduler:
+    enabled: false
+  kubeProxy:
+    enabled: false
+  prometheus:
+    prometheusSpec:
+      # Short local retention: history lives in VictoriaMetrics
+      retention: 1d
+      remoteWrite:
+        - url: http://monitoring-victoria-metrics-single-server:8428/api/v1/write
+      # 1d of samples for a small cluster fits in ~256Mi; the limit leaves room for WAL replay after a restart
+      resources:
+        requests:
+          cpu: 100m
+          memory: 256Mi
+        limits:
+          memory: 1Gi
+      # Pick up every ServiceMonitor / PodMonitor in the cluster, not only ours
+      serviceMonitorSelectorNilUsesHelmValues: false
+      podMonitorSelectorNilUsesHelmValues: false
+      ruleSelectorNilUsesHelmValues: false
+      storageSpec:
+        volumeClaimTemplate:
+          spec:
+            accessModes:
+              - ReadWriteOnce
+            resources:
+              requests:
+                storage: 2Gi # 1d retention
+
+# VictoriaMetrics single node: long-term metrics
+victoria-metrics-single:
+  enabled: true
+  server:
+    retentionPeriod: 1 # months
+    persistentVolume:
+      size: 5Gi
+    resources:
+      requests: {cpu: 50m, memory: 128Mi}
+      limits: {memory: 512Mi}
+    serviceMonitor:
+      enabled: true
+
+# VictoriaLogs single node: pod logs
+victoria-logs-single:
+  enabled: true
+  server:
+    retentionPeriod: 7d
+    persistentVolume:
+      size: 5Gi
+    resources:
+      requests: {cpu: 25m, memory: 64Mi}
+      limits: {memory: 512Mi}
+
+# Collector (DaemonSet): ships the logs of every pod to VictoriaLogs
+victoria-logs-collector:
+  enabled: true
+  # DaemonSet: one per node
+  resources:
+    requests: {cpu: 20m, memory: 48Mi}
+    limits: {memory: 256Mi}
+  remoteWrite:
+    - url: http://monitoring-victoria-logs-single-server:9428
+
+# Ingress rules (templates/networkpolicy.yaml): deny by default, same namespace and monitoring allowed.
+# allow: namespaces -> pods (labels) on these ports only. openPorts: admission webhooks (API server).
+networkPolicy:
+  openPorts:
+    - 10250
+  allow:
+    - name: ingress
+      from:
+        - traefik
+      pods:
+        app.kubernetes.io/name: grafana
+      ports:
+        - 3000
