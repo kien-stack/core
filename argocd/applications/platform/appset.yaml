@@ -26,7 +26,7 @@ spec:
             stage: "1"
           - app: external-secrets
             namespace: external-secrets
-            stage: "2"
+            stage: "3"
           # Optional
           - app: openebs
             namespace: openebs
@@ -67,7 +67,7 @@ spec:
         # 2: operators and storage
         - matchExpressions:
             - {key: stage, operator: In, values: ["2"]}
-        # 3: secrets (infisical)
+        # 3: secrets (external-secrets + infisical: they need each other, so same stage)
         - matchExpressions:
             - {key: stage, operator: In, values: ["3"]}
         # 4: monitoring and anything else
