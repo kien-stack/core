@@ -82,7 +82,7 @@ spec:
     spec:
       project: platform
       source:
-        repoURL: https://github.com/kien-stack/core.git
+        repoURL: https://github.com/kinops/core.git
         targetRevision: main
         path: "helm/platform/{{ .app }}"
         helm:
