@@ -23,7 +23,7 @@ ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 CONFIG="$ROOT/cluster.yaml"
 APP="$ROOT/argocd/app-of-apps.yaml"
 APPSET="$ROOT/argocd/applications/platform/appset.yaml"
-PACK=essential
+PACK=community
 CMD=install
 ARGOCD_TIMEOUT=${ARGOCD_TIMEOUT:-0}   # seconds to wait for the apps, 0 = until ready
 
@@ -77,7 +77,7 @@ while [ $# -gt 0 ]; do
   case "$1" in
     doctor|install|configure|uninstall) CMD=$1 ;;
     password) CMD=password; PW_APP=${2:-}; [ $# -lt 2 ] || shift ;;
-    --pack) [ "${2:-}" = "$PACK" ] || die "this repo installs the $PACK pack"; shift ;;
+    --pack) case "${2:-}" in "$PACK"|essential) ;; *) die "this repo installs the $PACK pack" ;; esac; shift ;;
     -h|--help) usage; exit 0 ;;
     *) usage; die "unknown argument: $1" ;;
   esac
