@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.4.4](https://github.com/kinopshq/core/compare/v0.4.3...v0.4.4) (2026-11-24)
+
+
+### Bug fixes
+
+* **install:** show the new pack name (Community, AI Platform, Enterprise) ([#81](https://github.com/kinopshq/core/issues/81)) ([eaf4658](https://github.com/kinopshq/core/commit/eaf465852c5edaf1f05e0bd74a2b8d67b6e8f449))
+
 ## [0.4.3](https://github.com/kien-stack/core/compare/v0.4.2...v0.4.3) (2026-11-24)
 
 
