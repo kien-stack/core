@@ -1,14 +1,14 @@
 #!/usr/bin/env bash
 # kinops Community INSTALL: the real, free install on your cluster.
-#   curl -fsSL https://raw.githubusercontent.com/kien-stack/core/main/scripts/install.sh | bash
-#   curl -fsSL https://raw.githubusercontent.com/kien-stack/core/main/scripts/install.sh | bash -s uninstall
-# Before: fork https://github.com/kien-stack/core (you need push access to your fork).
+#   curl -fsSL https://raw.githubusercontent.com/kinopshq/core/main/scripts/install.sh | bash
+#   curl -fsSL https://raw.githubusercontent.com/kinopshq/core/main/scripts/install.sh | bash -s uninstall
+# Before: fork https://github.com/kinopshq/core (you need push access to your fork).
 # Clones YOUR fork, then runs its ./install.sh (questions on first run, commit + push, install).
 # Same as: git clone <your fork> && cd <it> && ./install.sh
 # Non-interactive: KSTACK_REPO, KSTACK_BRANCH, KSTACK_DOMAIN, KSTACK_EMAIL, KSTACK_IP, KSTACK_CILIUM,
 # KSTACK_YES=1; GIT_USERNAME/GIT_TOKEN for a private repo. Requires kubectl, helm, git.
 set -euo pipefail
-UPSTREAM=https://github.com/kien-stack/core
+UPSTREAM=https://github.com/kinopshq/core
 DIR=${KSTACK_DIR:-$HOME/kien-stack}
 # colors: only on a TTY, honour NO_COLOR and TERM=dumb (bash 3.2 safe)
 kc() { [ -t "$1" ] && [ -z "${NO_COLOR:-}" ] && [ "${TERM:-dumb}" != dumb ]; }
@@ -42,9 +42,9 @@ if [ "${1:-}" = uninstall ]; then
   exec bash "$SRC/install.sh" "$@"
 fi
 
-ask KSTACK_REPO "Your fork of kien-stack/core, HTTPS URL" ""
-[ -n "$KSTACK_REPO" ] || die "a GitOps repo is required: fork $UPSTREAM first (or run https://raw.githubusercontent.com/kien-stack/core/main/scripts/try.sh for a demo)"
-case "$KSTACK_REPO" in *kien-stack/core*|*kien-stack/essential*|*dedsxc/kien-stack-essential*) die "that is our public repo: use your fork (or try.sh for a demo)" ;; esac
+ask KSTACK_REPO "Your fork of kinopshq/core, HTTPS URL" ""
+[ -n "$KSTACK_REPO" ] || die "a GitOps repo is required: fork $UPSTREAM first (or run https://raw.githubusercontent.com/kinopshq/core/main/scripts/try.sh for a demo)"
+case "$KSTACK_REPO" in *kinopshq/core*|*kien-stack/core*|*kien-stack/essential*|*dedsxc/kien-stack-essential*) die "that is our public repo: use your fork (or try.sh for a demo)" ;; esac
 case "$KSTACK_REPO" in *.git) ;; *) KSTACK_REPO="$KSTACK_REPO.git" ;; esac
 ask KSTACK_BRANCH "Branch ArgoCD tracks" main
 export KSTACK_REPO KSTACK_BRANCH
@@ -54,6 +54,6 @@ auth=()
 [ -z "${GIT_TOKEN:-}" ] || auth=(-c "http.extraheader=Authorization: Basic $(printf '%s:%s' "${GIT_USERNAME:-git}" "$GIT_TOKEN" | base64 | tr -d '\n')")
 if [ -d "$SRC/.git" ]; then git -C "$SRC" ${auth[@]+"${auth[@]}"} pull -q --ff-only origin "$KSTACK_BRANCH" || die "cannot update $SRC (local changes?)"
 else mkdir -p "$DIR"; git ${auth[@]+"${auth[@]}"} clone -q -b "$KSTACK_BRANCH" "$KSTACK_REPO" "$SRC" || die "cannot clone $KSTACK_REPO ($KSTACK_BRANCH)"; fi
-[ -f "$SRC/install.sh" ] && [ -f "$SRC/cluster.yaml" ] || die "$KSTACK_REPO does not look like a kien-stack/core fork (no install.sh / cluster.yaml)"
+[ -f "$SRC/install.sh" ] && [ -f "$SRC/cluster.yaml" ] || die "$KSTACK_REPO does not look like a kinopshq/core fork (no install.sh / cluster.yaml)"
 log "your fork: $SRC (edit, commit, push: ArgoCD applies it; rerun: cd $SRC && ./install.sh)"
 exec bash "$SRC/install.sh" "$@"
