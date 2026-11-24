@@ -1,6 +1,6 @@
 apiVersion: v2
 name: external-secrets
-description: kien/stack external-secrets (wraps the upstream chart)
+description: kinops external-secrets (wraps the upstream chart)
 type: application
 version: 0.1.0
 dependencies:

@@ -1,6 +1,6 @@
 apiVersion: v2
 name: traefik
-description: kien/stack traefik (wraps the upstream chart, Gateway API)
+description: kinops traefik (wraps the upstream chart, Gateway API)
 type: application
 version: 0.2.0
 dependencies:

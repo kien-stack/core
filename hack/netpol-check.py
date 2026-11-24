@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
-"""CI guard: every NetworkPolicy podSelector rendered by a brick must match at least one pod template
-of the same brick (catches label changes after a chart upgrade). Usage: netpol-check.py rendered.yaml...
+"""CI guard: every NetworkPolicy podSelector rendered by a component must match at least one pod template
+of the same component (catches label changes after a chart upgrade). Usage: netpol-check.py rendered.yaml...
 Pods created by operators (CloudNativePG instances, ClickHouse) are not in the Helm output: list their
 labels in OPERATOR_LABELS to accept them."""
 import sys, yaml

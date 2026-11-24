@@ -1,6 +1,6 @@
 apiVersion: v2
 name: reloader
-description: kien/stack reloader (wraps the upstream chart)
+description: kinops reloader (wraps the upstream chart)
 type: application
 version: 0.1.0
 dependencies:

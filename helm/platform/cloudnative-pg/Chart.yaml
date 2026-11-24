@@ -1,6 +1,6 @@
 apiVersion: v2
 name: cloudnative-pg
-description: kien/stack cloudnative-pg (wraps the upstream chart)
+description: kinops cloudnative-pg (wraps the upstream chart)
 type: application
 version: 0.1.0
 dependencies:

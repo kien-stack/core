@@ -4,7 +4,7 @@
      "kubernetes" (envs dev/staging/prod) and the machine identity "external-secrets" (Universal Auth, viewer on that
      project only), writes its credentials to external-secrets/infisical-universal-auth. The admin token is used in
      memory only, never stored.
-  3. ClusterSecretStores infisical-<env> (external-secrets brick): one per environment of the project "kubernetes".
+  3. ClusterSecretStores infisical-<env> (external-secrets component): one per environment of the project "kubernetes".
   Usage: one folder per app in the project (/shop-api), then in the app an ExternalSecret on store infisical-prod with
   dataFrom.find.path: /shop-api (all its secrets) or data.remoteRef.key: /shop-api/DB_PASSWORD. */ -}}
 {{- $b := .Values.bootstrap | default dict }}

@@ -1,6 +1,6 @@
 apiVersion: v2
 name: cert-manager
-description: kien/stack cert-manager (wraps the upstream chart)
+description: kinops cert-manager (wraps the upstream chart)
 type: application
 version: 0.1.0
 dependencies:

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# kien/stack Essential installer (free, Apache-2.0). Run it from a clone of YOUR fork (or curl .../scripts/install.sh | bash).
+# kinops Community installer (free, Apache-2.0). Run it from a clone of YOUR fork (or curl .../scripts/install.sh | bash).
 # First run (cluster.yaml still on example.com) asks a few questions, writes cluster.yaml + argocd/, commits and pushes.
 #   ./install.sh             configure if needed, then install (default)
 #   ./install.sh configure   ask the questions again, commit, push, install
@@ -37,7 +37,7 @@ TTY=""; if [ -t 1 ] && [ "${TERM:-dumb}" != dumb ]; then TTY=1; fi
 QUIET="" PEND=""
 verbose() { [ -z "$QUIET" ] || [ -n "${KSTACK_VERBOSE:-}" ]; }
 clr()  { if [ -n "$PEND" ]; then printf '\r\033[K'; PEND=""; fi; }
-log()  { verbose || return 0; clr; printf '%s[kien/stack]%s %s\n' "${C_H}" "${C_0}" "$*"; }
+log()  { verbose || return 0; clr; printf '%s[kinops]%s %s\n' "${C_H}" "${C_0}" "$*"; }
 ok()   { verbose || return 0; clr; printf '  %sOK%s   %s\n' "${C_G}" "${C_0}" "$*"; }
 WARNS=()
 # warn: shown at once outside install; during install collected and shown in a "Warnings" section
@@ -49,7 +49,7 @@ flush_warns() {
   WARNS=()
 }
 ko()   { clr; printf '  %sKO%s   %s\n' "${C_R}" "${C_0}" "$*"; }
-die()  { clr; printf '%s[kien/stack] ERROR:%s %s\n' "${E_R}" "${E_0}" "$*" >&2; exit 1; }
+die()  { clr; printf '%s[kinops] ERROR:%s %s\n' "${E_R}" "${E_0}" "$*" >&2; exit 1; }
 # step NAME TEXT: one line per install step; busy NAME TEXT: same line while it runs (TTY only)
 busy() { [ -z "$TTY" ] || { clr; printf ' %s◌%s %-12s %s' "${C_D}" "${C_0}" "$1" "$2"; PEND=1; }; }
 step() { clr; printf ' %s✓%s %-12s %s\n' "${C_G}" "${C_0}" "$1" "$2"; }
@@ -59,7 +59,7 @@ version() {
     || v=$(sed -n 's/^## \[\{0,1\}\([0-9][0-9.]*\).*/v\1/p' "$ROOT/CHANGELOG.md" 2>/dev/null | head -1) || true
   printf '%s' "$v"
 }
-header() { local v; v=$(version); printf '\n %skien/stack%s · %s%s\n\n' "${C_B}" "${C_0}" "$PACK" "${v:+ ${v}}"; }
+header() { local v; v=$(version); printf '\n %skinops%s · %s%s\n\n' "${C_B}" "${C_0}" "$PACK" "${v:+ ${v}}"; }
 # how to run this installer from the user's shell (try.sh / scripts/install.sh set KSTACK_PWD)
 self_cmd() {
   local p="$ROOT/install.sh"
@@ -145,7 +145,7 @@ doctor() {
   fi
 
   local r; r=$(repo)
-  [ -n "${KSTACK_DEMO:-}" ] || case "$r" in *kien-stack/essential*|*dedsxc/kien-stack-essential*) warn "argocd/app-of-apps.yaml still points to our public repo: put your fork's URL there (and in argocd/applications/*/appset.yaml)" ;; esac
+  [ -n "${KSTACK_DEMO:-}" ] || case "$r" in *kinops/core*|*kien-stack/core*|*kien-stack/essential*|*dedsxc/kien-stack-essential*) warn "argocd/app-of-apps.yaml still points to our public repo: put your fork's URL there (and in argocd/applications/*/appset.yaml)" ;; esac
   if grep -rq "repoURL: $r" "$ROOT"/argocd/applications/*/appset.yaml && [ "$(grep -rh 'repoURL:' "$ROOT"/argocd/applications/*/appset.yaml | sort -u | wc -l)" -eq 1 ]; then
     ok "ApplicationSets follow the same repo as app-of-apps"
   else ko "argocd/applications/*/appset.yaml must use the same repoURL as argocd/app-of-apps.yaml ($r)"; fail=1; fi
@@ -457,7 +457,7 @@ setup() {
      && [ -n "$(cfg .global.domain)" ] && [ "$(cfg .global.domain)" != example.com ]; then
     log "configured (cluster.yaml: $(cfg .global.domain)): installing as is (./install.sh configure to change)"; return 0
   fi
-  case "$origin" in *kien-stack/essential*|*dedsxc/kien-stack-essential*) die "that is our public repo: use your fork (or scripts/try.sh for a demo)" ;; esac
+  case "$origin" in *kinops/core*|*kien-stack/core*|*kien-stack/essential*|*dedsxc/kien-stack-essential*) die "that is our public repo: use your fork (or scripts/try.sh for a demo)" ;; esac
   kubectl version --request-timeout=10s >/dev/null 2>&1 || die "no reachable cluster in the current kubectl context.
   No Kubernetes? k3s in one minute: curl -sfL https://get.k3s.io | INSTALL_K3S_EXEC=\"--disable traefik\" sh -"
   log "context: $(kubectl config current-context). Configuring $origin ($branch). A few questions (Enter = default):"
@@ -498,8 +498,8 @@ setup() {
     local a; read -r -p "  ${E_Q}Commit and push to ${origin} (${branch})?${E_0} [Y/n]: " a </dev/tty || true
     case "${a:-y}" in y|Y|yes) ;; *) die "nothing pushed. Your edited fork is in $ROOT: push it, then run ./install.sh there" ;; esac
   fi
-  git -C "$ROOT" -c user.name="${GIT_AUTHOR_NAME:-kien-stack}" -c user.email="${GIT_AUTHOR_EMAIL:-kien-stack@localhost}" \
-    commit -qm "kien/stack: my settings (domain $dom)" -- cluster.yaml argocd || die "git commit failed"
+  git -C "$ROOT" -c user.name="${GIT_AUTHOR_NAME:-kinops}" -c user.email="${GIT_AUTHOR_EMAIL:-kinops@localhost}" \
+    commit -qm "kinops: my settings (domain $dom)" -- cluster.yaml argocd || die "git commit failed"
   local auth=()
   [ -z "${GIT_TOKEN:-}" ] || auth=(-c "http.extraheader=Authorization: Basic $(printf '%s:%s' "${GIT_USERNAME:-git}" "$GIT_TOKEN" | b64)")
   git -C "$ROOT" ${auth[@]+"${auth[@]}"} push -q origin "HEAD:$branch" || die "push failed (write access to $origin? set GIT_USERNAME/GIT_TOKEN). Your edited fork is in $ROOT"

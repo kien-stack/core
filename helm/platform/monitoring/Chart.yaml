@@ -1,6 +1,6 @@
 apiVersion: v2
 name: monitoring
-description: kien/stack monitoring (wraps the upstream charts)
+description: kinops monitoring (wraps the upstream charts)
 type: application
 version: 0.1.0
 dependencies:

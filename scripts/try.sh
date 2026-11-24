@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
-# kien/stack Essential TRY: a disposable demo on your current cluster, zero questions.
-#   curl -fsSL https://raw.githubusercontent.com/kien-stack/essential/main/scripts/try.sh | bash
-#   curl -fsSL https://raw.githubusercontent.com/kien-stack/essential/main/scripts/try.sh | bash -s uninstall
+# kinops Community TRY: a disposable demo on your current cluster, zero questions.
+#   curl -fsSL https://raw.githubusercontent.com/kinops/core/main/scripts/try.sh | bash
+#   curl -fsSL https://raw.githubusercontent.com/kinops/core/main/scripts/try.sh | bash -s uninstall
 # Uses the public repo on main (ArgoCD follows main; pin a release with KSTACK_REF=vX.Y.Z),
-# <node-ip>.sslip.io and self-signed certs. For real use: https://raw.githubusercontent.com/kien-stack/essential/main/scripts/install.sh
+# <node-ip>.sslip.io and self-signed certs. For real use: https://raw.githubusercontent.com/kinops/core/main/scripts/install.sh
 # Overrides: KSTACK_IP, KSTACK_REF. Requires kubectl, helm, git (yq is fetched if missing).
 set -euo pipefail
 KSTACK_PWD=$PWD   # where the user runs this: install.sh prints the commands relative to it
-REPO=${KSTACK_SOURCE:-https://github.com/kien-stack/essential}
+REPO=${KSTACK_SOURCE:-https://github.com/kinops/core}
 REF=${KSTACK_REF:-main}
 DIR=${KSTACK_DIR:-$HOME/kien-stack-try}
 # colors: only on a TTY, honour NO_COLOR and TERM=dumb (bash 3.2 safe)
@@ -15,7 +15,7 @@ kc() { [ -t "$1" ] && [ -z "${NO_COLOR:-}" ] && [ "${TERM:-dumb}" != dumb ]; }
 # shellcheck disable=SC2034
 if kc 1; then C_H=$'\033[1;36m' C_G=$'\033[32m' C_Y=$'\033[33m' C_R=$'\033[31m' C_D=$'\033[2m' C_0=$'\033[0m'; else C_H='' C_G='' C_Y='' C_R='' C_D='' C_0=''; fi
 if kc 2; then E_R=$'\033[1;31m' E_0=$'\033[0m'; else E_R='' E_0=''; fi
-log() { printf '%s[kien/stack]%s %s\n' "${C_H}" "${C_0}" "$*"; }
+log() { printf '%s[kinops]%s %s\n' "${C_H}" "${C_0}" "$*"; }
 die() { printf '%serror:%s %s\n' "${E_R}" "${E_0}" "$*" >&2; exit 1; }
 ask() { # ask VAR "question" default
   local v=${!1:-}; if [ -n "$v" ] || [ -n "${KSTACK_YES:-}" ] || [ ! -r /dev/tty ]; then printf -v "$1" %s "${v:-$3}"; return; fi
@@ -99,10 +99,10 @@ D="$dom" V="$REF" EL="$(yq -o=json -I=0 '.spec.generators[0].list.elements' argo
       {"op": "replace", "path": "/spec/generators/0/list/elements", "value": (strenv(EL) | from_json)}] | to_json)}]' argocd/app-of-apps.yaml
 
 KSTACK_DEMO=1 KSTACK_PWD=$KSTACK_PWD bash install.sh install || exit $?
-raw=https://raw.githubusercontent.com/kien-stack/essential/main/scripts
+raw=https://raw.githubusercontent.com/kinops/core/main/scripts
 b=$(printf '%*s' 39 ''); b=${b// /─}
 printf '\n %s─── Next steps %s%s\n' "${C_D}" "$b" "${C_0}"
-printf ' %-16s %s\n' "1. Real install" "curl -fsSL $raw/install.sh | bash" "2. More packs" "https://shop.kien.cc"
+printf ' %-16s %s\n' "1. Real install" "curl -fsSL $raw/install.sh | bash" "2. More packs" "https://kinops.dev"
 b=$(printf '%*s' 43 ''); b=${b// /─}
 printf '\n %s─── Remove %s%s\n' "${C_D}" "$b" "${C_0}"
 printf ' %s\n' "curl -fsSL $raw/try.sh | bash -s uninstall"

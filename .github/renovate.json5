@@ -1,4 +1,4 @@
-// Renovate config for kien/stack Essential (and your fork).
+// Renovate config for kinops Community (and your fork).
 // Works with the Mend Renovate GitHub App (just install it on your fork)
 // or with the self-hosted workflow .github/workflows/renovate.yaml (needs secret RENOVATE_TOKEN).
 {
@@ -39,7 +39,7 @@
   ],
   packageRules: [
     {
-      description: 'Platform charts: one PR per brick for minor+patch',
+      description: 'Platform charts: one PR per component for minor+patch',
       matchManagers: ['helmv3', 'helm-values'],
       matchFileNames: ['helm/platform/**'],
       matchUpdateTypes: ['minor', 'patch'],
@@ -67,7 +67,7 @@
       automerge: false, // conservative default: flip to true in your fork if you trust the CI
     },
     {
-      description: 'ArgoCD is the bootstrap brick (install.sh helm_bootstrap): never automerge',
+      description: 'ArgoCD is the bootstrap component (install.sh helm_bootstrap): never automerge',
       matchPackageNames: ['argo-cd', 'cilium'],
       automerge: false,
       addLabels: ['bootstrap'],

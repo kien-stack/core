@@ -1,6 +1,6 @@
 apiVersion: v2
 name: argocd
-description: kien/stack argocd (wraps the upstream chart)
+description: kinops argocd (wraps the upstream chart)
 type: application
 version: 0.1.0
 dependencies:
