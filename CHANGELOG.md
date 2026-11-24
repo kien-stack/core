@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.4.3](https://github.com/kien-stack/core/compare/v0.4.2...v0.4.3) (2026-11-24)
+
+
+### Documentation
+
+* install from a private repo ([#77](https://github.com/kien-stack/core/issues/77)) ([babd26f](https://github.com/kien-stack/core/commit/babd26fade1310e56368f2fd5385a07bd4b917f8))
+* rebrand to kinops, rename packs (Community, AI Platform, Enterprise) ([#79](https://github.com/kien-stack/core/issues/79)) ([26dfd6d](https://github.com/kien-stack/core/commit/26dfd6d64e3a4b27329ea384f765c09a4089893f))
+
 ## [0.4.2](https://github.com/kien-stack/essential/compare/v0.4.1...v0.4.2) (2026-11-23)
 
 
