@@ -145,7 +145,7 @@ doctor() {
   fi
 
   local r; r=$(repo)
-  [ -n "${KSTACK_DEMO:-}" ] || case "$r" in *kinops/core*|*kien-stack/core*|*kien-stack/essential*|*dedsxc/kien-stack-essential*) warn "argocd/app-of-apps.yaml still points to our public repo: put your fork's URL there (and in argocd/applications/*/appset.yaml)" ;; esac
+  [ -n "${KSTACK_DEMO:-}" ] || case "$r" in *kien-stack/core*|*kien-stack/essential*|*dedsxc/kien-stack-essential*) warn "argocd/app-of-apps.yaml still points to our public repo: put your fork's URL there (and in argocd/applications/*/appset.yaml)" ;; esac
   if grep -rq "repoURL: $r" "$ROOT"/argocd/applications/*/appset.yaml && [ "$(grep -rh 'repoURL:' "$ROOT"/argocd/applications/*/appset.yaml | sort -u | wc -l)" -eq 1 ]; then
     ok "ApplicationSets follow the same repo as app-of-apps"
   else ko "argocd/applications/*/appset.yaml must use the same repoURL as argocd/app-of-apps.yaml ($r)"; fail=1; fi
@@ -457,7 +457,7 @@ setup() {
      && [ -n "$(cfg .global.domain)" ] && [ "$(cfg .global.domain)" != example.com ]; then
     log "configured (cluster.yaml: $(cfg .global.domain)): installing as is (./install.sh configure to change)"; return 0
   fi
-  case "$origin" in *kinops/core*|*kien-stack/core*|*kien-stack/essential*|*dedsxc/kien-stack-essential*) die "that is our public repo: use your fork (or scripts/try.sh for a demo)" ;; esac
+  case "$origin" in *kien-stack/core*|*kien-stack/essential*|*dedsxc/kien-stack-essential*) die "that is our public repo: use your fork (or scripts/try.sh for a demo)" ;; esac
   kubectl version --request-timeout=10s >/dev/null 2>&1 || die "no reachable cluster in the current kubectl context.
   No Kubernetes? k3s in one minute: curl -sfL https://get.k3s.io | INSTALL_K3S_EXEC=\"--disable traefik\" sh -"
   log "context: $(kubectl config current-context). Configuring $origin ($branch). A few questions (Enter = default):"
