@@ -1,4 +1,4 @@
-# The base platform: one Application per entry of the list below (brick + namespace).
+# The base platform: one Application per entry of the list below (component + namespace).
 # repoURL/revision: your fork (same as argocd/app-of-apps.yaml). Values: values.yaml + /cluster.yaml.
 apiVersion: argoproj.io/v1alpha1
 kind: ApplicationSet
@@ -11,10 +11,10 @@ spec:
     - missingkey=error
   generators:
     - list:
-        # One entry = one brick (helm/platform/<app>) deployed in <namespace>.
-        # Disable a brick: comment out its entry and push (ArgoCD removes it).
+        # One entry = one component (helm/platform/<app>) deployed in <namespace>.
+        # Disable a component: comment out its entry and push (ArgoCD removes it).
         elements:
-          # Required: the other bricks and your apps depend on them
+          # Required: the other components and your apps depend on them
           - app: argocd
             namespace: argocd
             stage: "1"
@@ -56,7 +56,7 @@ spec:
           #   stage: "1"
   # Progressive sync: deploy in order, one stage after the other (a stage waits until the
   # previous one is Healthy). Stage = the "stage" field of each element above.
-  # An empty stage (all its bricks disabled) is skipped.
+  # An empty stage (all its components disabled) is skipped.
   strategy:
     type: RollingSync
     rollingSync:
@@ -69,7 +69,7 @@ spec:
             - {key: stage, operator: In, values: ["2"]}
         # 3: secrets and monitoring, together: external-secrets stores need Infisical, Infisical's
         #    PodMonitor needs the monitoring CRDs, monitoring's secrets need external-secrets
-        #    (also any brick without a known stage)
+        #    (also any component without a known stage)
         - matchExpressions:
             - {key: stage, operator: NotIn, values: ["1", "2"]}
   template:
@@ -82,7 +82,7 @@ spec:
     spec:
       project: platform
       source:
-        repoURL: https://github.com/kien-stack/essential.git
+        repoURL: https://github.com/kien-stack/core.git
         targetRevision: main
         path: "helm/platform/{{ .app }}"
         helm:

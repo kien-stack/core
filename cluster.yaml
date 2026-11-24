@@ -23,7 +23,7 @@ global:
       secretName: dns01-api-token
       secretKey: api-token
   secrets:
-    # infisical (default): the infisical brick bootstraps itself (admin in infisical/infisical-admin), creates the
+    # infisical (default): the infisical component bootstraps itself (admin in infisical/infisical-admin), creates the
     # project below and the External Secrets identity. Stores: infisical-<env>. One folder per app (/shop-api).
     # none: no store.
     provider: infisical
@@ -33,7 +33,7 @@ global:
       environments: [dev, staging, prod]
       credentialsSecret: infisical-universal-auth
 
-# Per-brick settings (key = upstream chart name, same as in helm/platform/<brick>/values.yaml).
+# Per-component settings (key = upstream chart name, same as in helm/platform/<component>/values.yaml).
 traefik:
   service:
     spec:

@@ -1,6 +1,6 @@
 apiVersion: v2
 name: cilium
-description: kien/stack cilium (wraps the upstream chart)
+description: kinops cilium (wraps the upstream chart)
 type: application
 version: 0.1.0
 dependencies:

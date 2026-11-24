@@ -21,7 +21,7 @@ cnpg-cluster:
       argocd.argoproj.io/sync-wave: "1"
     storage:
       size: 1Gi
-      # openebs-hostpath (Essential). Cloud cluster without OpenEBS: your StorageClass
+      # openebs-hostpath (platform base). Cloud cluster without OpenEBS: your StorageClass
       storageClass: openebs-hostpath
     walStorage:
       size: 1Gi
@@ -47,7 +47,7 @@ cnpg-cluster:
 app-template:
   controller:
     annotations:
-      # after the database (wave 1); restart the pods when a secret changes (Reloader brick)
+      # after the database (wave 1); restart the pods when a secret changes (Reloader component)
       argocd.argoproj.io/sync-wave: "2"
       reloader.stakater.com/auto: "true"
     initContainers:

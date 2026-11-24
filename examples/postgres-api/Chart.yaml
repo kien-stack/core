@@ -8,7 +8,7 @@ dependencies:
   - name: app-template
     repository: oci://ghcr.io/dedsxc
     version: 2.0.0
-  # Postgres: CloudNativePG Cluster + Database + generated password (needs the cloudnative-pg and external-secrets bricks)
+  # Postgres: CloudNativePG Cluster + Database + generated password (needs the cloudnative-pg and external-secrets components)
   - name: cnpg-cluster
     repository: oci://ghcr.io/dedsxc
     version: 5.0.0

@@ -1,4 +1,4 @@
-# kien/stack Essential
+# kinops Community
 
 A free, open source GitOps platform for Kubernetes, installed in one command.
 Everything lives in your Git repo and ArgoCD applies it.
@@ -7,31 +7,31 @@ Everything lives in your Git repo and ArgoCD applies it.
 CloudNativePG, Reloader, metrics-server, OpenEBS and monitoring (Prometheus, Grafana, VictoriaMetrics,
 VictoriaLogs). Optional: Cilium, external-dns.
 
-This is the platform base of every pack, monitoring included. In Essential, Grafana uses a local admin (no SSO).
+This is the platform base of every pack, monitoring included. In Community, Grafana uses a local admin (no SSO).
 
 ## Packs
 
 | Pack | What you get | Status |
 |---|---|---|
-| **Essential** (this repo) | Platform base: GitOps platform above + monitoring (Grafana with a local admin, no SSO) | Free, open source |
+| **Community** (this repo) | Platform base: GitOps platform above + monitoring (Grafana with a local admin, no SSO) | Free, open source |
 | **AI Platform** | Platform base (monitoring included, no SSO) + self-hosted AI (Ollama, LiteLLM, Onyx, Langfuse, Coder, OpenClaw) | Available |
-| **Pro** | AI Platform + Authentik SSO (Grafana and apps log in with it), Velero backups, Argo Rollouts, Image Updater, Radar, Renovate. Planned: HA, multi-DC, disaster recovery | Available (HA, multi-DC, DR planned) |
+| **Enterprise** | AI Platform + Authentik SSO (Grafana and apps log in with it), Velero backups, Argo Rollouts, Image Updater, Radar, Renovate. Planned: HA, multi-DC, disaster recovery | Available (HA, multi-DC, DR planned) |
 
-Pro is the former All-In-One pack (`kien-stack/full`) plus the enterprise features. Shipped today: Authentik SSO, Velero backups (in-cluster SeaweedFS S3; add an off-cluster S3 location for disaster recovery), Argo Rollouts, Image Updater, Radar, Renovate. Planned, not available yet: HA, multi-DC, full disaster recovery.
+Enterprise, shipped today: Authentik SSO, Velero backups (in-cluster SeaweedFS S3; add an off-cluster S3 location for disaster recovery), Argo Rollouts, Image Updater, Radar, Renovate. Planned, not available yet: HA, multi-DC, full disaster recovery.
 
 ## Try it
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/kien-stack/essential/main/scripts/try.sh | bash
+curl -fsSL https://raw.githubusercontent.com/kien-stack/core/main/scripts/try.sh | bash
 ```
 
 ## Install
 
-1. [Fork this repo](https://github.com/kien-stack/essential/fork).
+1. [Fork this repo](https://github.com/kien-stack/core/fork).
 2. Run the installer (one script). First run asks for your fork, domain and email, commits and pushes:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/kien-stack/essential/main/scripts/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/kien-stack/core/main/scripts/install.sh | bash
 ```
 
 Or from your clone: `./install.sh` (`./install.sh configure` to change the answers).
@@ -54,7 +54,7 @@ If your fork is private (GitLab, Gitea, private GitHub...), the installer needs 
    ```bash
    export GIT_USERNAME=<your-user>
    export GIT_TOKEN=<your-token>
-   curl -fsSL https://raw.githubusercontent.com/kien-stack/essential/main/scripts/install.sh | bash
+   curl -fsSL https://raw.githubusercontent.com/kien-stack/core/main/scripts/install.sh | bash
    ```
 
 > [!NOTE]
@@ -78,7 +78,7 @@ Full docs: https://shop.kien.cc/docs
 ## Uninstall
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/kien-stack/essential/main/scripts/install.sh | bash -s uninstall
+curl -fsSL https://raw.githubusercontent.com/kien-stack/core/main/scripts/install.sh | bash -s uninstall
 ```
 
 Removes the ArgoCD apps, then ArgoCD. Namespaces and volumes are kept; delete them with `kubectl delete ns ...` if you want.

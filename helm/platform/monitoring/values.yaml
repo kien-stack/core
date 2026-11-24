@@ -2,7 +2,7 @@
 # VictoriaMetrics keeps the metrics (Prometheus remote-writes, short local retention), VictoriaLogs keeps the pod logs.
 # Grafana: datasource "Prometheus" reads VictoriaMetrics, datasource "VictoriaLogs" reads the logs.
 # Grafana admin: secret monitoring/grafana-admin (ExternalSecret, templates/secrets.yaml), local login only (no SSO in
-# Essential). Exposed with Gateway API (grafana.route below, listener https-grafana: "grafana" in global.gatewayHosts).
+# Community). Exposed with Gateway API (grafana.route below, listener https-grafana: "grafana" in global.gatewayHosts).
 # Sized for small clusters (docs/FAQ.md: 2 vCPU, 6-8 GB): ~0.3 vCPU / 1 GiB requested, ~1.5 GiB used.
 # Bigger cluster or more history: raise the requests/limits, retention and PV sizes below.
 kube-prometheus-stack:
