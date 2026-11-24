@@ -22,16 +22,16 @@ Enterprise, shipped today: Authentik SSO, Velero backups (in-cluster SeaweedFS S
 ## Try it
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/kinops/core/main/scripts/try.sh | bash
+curl -fsSL https://raw.githubusercontent.com/kinopshq/core/main/scripts/try.sh | bash
 ```
 
 ## Install
 
-1. [Fork this repo](https://github.com/kinops/core/fork).
+1. [Fork this repo](https://github.com/kinopshq/core/fork).
 2. Run the installer (one script). First run asks for your fork, domain and email, commits and pushes:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/kinops/core/main/scripts/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/kinopshq/core/main/scripts/install.sh | bash
 ```
 
 Or from your clone: `./install.sh` (`./install.sh configure` to change the answers).
@@ -54,7 +54,7 @@ If your fork is private (GitLab, Gitea, private GitHub...), the installer needs 
    ```bash
    export GIT_USERNAME=<your-user>
    export GIT_TOKEN=<your-token>
-   curl -fsSL https://raw.githubusercontent.com/kinops/core/main/scripts/install.sh | bash
+   curl -fsSL https://raw.githubusercontent.com/kinopshq/core/main/scripts/install.sh | bash
    ```
 
 > [!NOTE]
@@ -78,7 +78,7 @@ Full docs: https://shop.kien.cc/docs
 ## Uninstall
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/kinops/core/main/scripts/install.sh | bash -s uninstall
+curl -fsSL https://raw.githubusercontent.com/kinopshq/core/main/scripts/install.sh | bash -s uninstall
 ```
 
 Removes the ArgoCD apps, then ArgoCD. Namespaces and volumes are kept; delete them with `kubectl delete ns ...` if you want.

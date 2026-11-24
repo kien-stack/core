@@ -8,7 +8,7 @@ metadata:
 spec:
   project: default
   source:
-    repoURL: https://github.com/kinops/core.git
+    repoURL: https://github.com/kinopshq/core.git
     targetRevision: main
     path: argocd/applications
   destination:
