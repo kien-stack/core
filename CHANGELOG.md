@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.4.5](https://github.com/kinopshq/core/compare/v0.4.4...v0.4.5) (2026-11-24)
+
+
+### Bug fixes
+
+* **install:** restore the community pack name (reverted by [#80](https://github.com/kinopshq/core/issues/80)) ([#83](https://github.com/kinopshq/core/issues/83)) ([f3e9e75](https://github.com/kinopshq/core/commit/f3e9e7537cca010c77d7446ce94f211ea0948aa6))
+
 ## [0.4.4](https://github.com/kinopshq/core/compare/v0.4.3...v0.4.4) (2026-11-24)
 
 
