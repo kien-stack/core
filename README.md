@@ -19,8 +19,6 @@ This is the platform base of every pack, monitoring and S3 included. In Communit
 | **AI Platform** | Community + single sign-on (Authentik) + your own AI: chat over your docs (Onyx), local LLMs (Ollama), LLM gateway (LiteLLM), tracing (Langfuse), agent (OpenClaw), dev environments (Coder), MCP tools for your agents (ArgoCD, metrics, logs, Coder) | Available |
 | **Enterprise** | AI Platform + resilience: HA Postgres, distributed storage, volume backups outside the cluster, disaster recovery, multi-DC. Plus AI Ops, progressive delivery, image updates, read-only cluster view | Available (HA, multi-DC, DR planned) |
 
-Enterprise, shipped today: Velero volume backups, Argo Rollouts, Image Updater, Radar, Renovate. Planned, not available yet: HA Postgres, distributed storage, multi-DC, tested disaster recovery.
-
 ## Try it
 
 ```bash
