@@ -31,7 +31,8 @@ if ! command -v yq >/dev/null; then
   fi
 fi
 kubectl version --request-timeout=10s >/dev/null 2>&1 || die "no reachable cluster in the current kubectl context.
-  No Kubernetes? k3s in one minute: curl -sfL https://get.k3s.io | INSTALL_K3S_EXEC=\"--disable traefik\" sh -"
+  No Kubernetes? k3s in one minute (kien/stack brings its own Traefik, metrics-server and storage):
+  curl -sfL https://get.k3s.io | INSTALL_K3S_EXEC=\"--disable traefik --disable metrics-server --disable local-storage\" sh -"
 
 SRC="$DIR/repo"
 if [ "${1:-}" = uninstall ]; then

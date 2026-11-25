@@ -71,6 +71,7 @@ If your fork is private (GitLab, Gitea, private GitHub...), the installer needs 
 | Turn a component on or off | Comment or uncomment it in `argocd/applications/platform/appset.yaml` |
 | Deploy my app | Copy an example from `examples/` to `helm/apps/<my-app>/`: [docs/BOOTSTRAP-APP.md](docs/BOOTSTRAP-APP.md) |
 | Understand the repo layout | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) |
+| Back up my databases | Set `global.backup.s3` in `cluster.yaml`, see [docs/BACKUP.md](docs/BACKUP.md) |
 | Tune a component | Edit `helm/platform/<component>/values.yaml` |
 
 Full docs: https://shop.kien.cc/docs

@@ -32,8 +32,46 @@ global:
       projectSlug: kubernetes
       environments: [dev, staging, prod]
       credentialsSecret: infisical-universal-auth
+  # Every Postgres: the bricks' and your apps' (cnpg-cluster chart in helm/*/<app>/Chart.yaml)
+  cnpg:
+    # One node: 1 (a second instance on the same disk is not high availability). 3+ nodes: 2 or 3.
+    instances: 1
+    # reclaimPolicy Retain: a deleted Cluster, PVC or namespace leaves the data on disk (helm/platform/openebs).
+    # Cloud cluster without OpenEBS: your provider's StorageClass, ideally one with reclaimPolicy Retain.
+    storageClass: openebs-hostpath-retain
+  # Backups of every Postgres: WAL archived continuously (point-in-time recovery) + a full base backup
+  # on a schedule (docs/BACKUP.md). Default: the in-cluster SeaweedFS (seaweedfs component, keys generated
+  # by install.sh). It protects against mistakes and corruption, NOT against losing the node.
+  # External S3 (AWS, Scaleway, OVH, R2, B2, MinIO elsewhere...): set destinationPath/endpointURL/region,
+  # pass BACKUP_S3_ACCESS_KEY_ID / BACKUP_S3_SECRET_ACCESS_KEY to install.sh (never in Git), and you can
+  # comment out seaweedfs in argocd/applications/platform/appset.yaml.
+  backup:
+    s3:
+      # s3://<bucket>/<this cluster>, e.g. s3://acme-backups/prod
+      destinationPath: s3://postgres/cluster
+      # Empty = AWS S3. Otherwise e.g. https://s3.fr-par.scw.cloud, https://<account>.r2.cloudflarestorage.com
+      endpointURL: http://seaweedfs-s3.seaweedfs.svc:8333
+      # e.g. eu-west-3, fr-par (empty = the provider's default)
+      region: ""
+      # Where each Postgres gets the keys (external-secrets component): do not change
+      clusterSecretStore: backup-s3
+      remoteKey: backup-s3
+    # Full base backup (CloudNativePG cron, 6 fields, seconds first): every 3 days at 02:00
+    schedule: "0 0 2 */3 * *"
+    # Restore to any point of the last 7 days
+    retentionPolicy: 7d
+    # Disaster recovery on a NEW cluster: the destinationPath of the lost one (docs/BACKUP.md).
+    # destinationPath above must then be a new path.
+    # restore:
+    #   from: s3://acme-backups/prod
 
 # Per-component settings (key = upstream chart name, same as in helm/platform/<component>/values.yaml).
+
+# Health checks every 15 min (helm/platform/checks): Postgres, WAL archiving, backup age, free disk,
+# certificates. Alerts: CHECKS_WEBHOOK_URL (Slack, Discord...) and CHECKS_HEARTBEAT_URL (healthchecks.io,
+# Uptime Kuma...: alerts you when the pings stop) for install.sh (Secret checks/checks-notify), never in Git.
+# checks:
+#   diskMinFreePercent: 15
 traefik:
   service:
     spec:

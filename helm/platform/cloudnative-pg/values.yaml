@@ -8,3 +8,14 @@ networkPolicy:
   openPorts:
     - 9443
   allow: []
+# Barman Cloud plugin (CRD ObjectStore). Every Postgres with backups on (global.backup in cluster.yaml)
+# gets its sidecar; the manager itself is one small pod.
+plugin-barman-cloud:
+  crds:
+    create: true
+  resources:
+    requests:
+      cpu: 10m
+      memory: 32Mi
+    limits:
+      memory: 256Mi

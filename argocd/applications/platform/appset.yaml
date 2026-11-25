@@ -6,6 +6,14 @@ metadata:
   name: platform
   namespace: argocd
 spec:
+  # Data safety: this ApplicationSet never deletes an Application. Removing an entry below (an edit,
+  # a merge, an update that turns a brick off by default) leaves the brick running, and deleting this
+  # ApplicationSet leaves every brick and its data in place. Remove a brick on purpose:
+  #   kubectl -n argocd delete application <brick>
+  # Its databases (CloudNativePG Cluster, Prune=false,Delete=false) and volumes are kept.
+  syncPolicy:
+    applicationsSync: create-update
+    preserveResourcesOnDeletion: true
   goTemplate: true
   goTemplateOptions:
     - missingkey=error
@@ -34,6 +42,10 @@ spec:
           - app: cloudnative-pg
             namespace: cnpg-system
             stage: "2"
+          # In-cluster S3 (SeaweedFS): default target of the Postgres backups (global.backup in cluster.yaml)
+          - app: seaweedfs
+            namespace: seaweedfs
+            stage: "2"
           - app: infisical
             namespace: infisical
             stage: "3"
@@ -46,6 +58,10 @@ spec:
           # Prometheus + Grafana (https://grafana.<domain>) + VictoriaMetrics + VictoriaLogs
           - app: monitoring
             namespace: monitoring
+            stage: "3"
+          # Health checks every 15 min: backups, WAL archiving, disk, certificates; heartbeat + webhook
+          - app: checks
+            namespace: checks
             stage: "3"
           # Off by default: uncomment to enable
           # - app: cilium

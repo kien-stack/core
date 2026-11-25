@@ -1,0 +1,74 @@
+{{- /*
+Backups of infisical-cluster (Barman Cloud plugin, global.backup in /cluster.yaml): S3 keys copied from
+external-secrets/backup-s3, ObjectStore (WAL archived continuously = point-in-time recovery) and a
+ScheduledBackup (full base backup). Delete=false: they stay with the kept Cluster.
+*/}}
+{{- $b := (.Values.global | default dict).backup | default dict }}
+{{- $s3 := $b.s3 | default dict }}
+{{- $name := "infisical-cluster" }}
+{{- $path := required "global.backup.s3.destinationPath is required (default: the in-cluster SeaweedFS)" $s3.destinationPath }}
+---
+apiVersion: external-secrets.io/v1
+kind: ExternalSecret
+metadata:
+  name: {{ $name }}-backup-s3
+  annotations:
+    argocd.argoproj.io/sync-wave: "-1"
+    argocd.argoproj.io/sync-options: SkipDryRunOnMissingResource=true,Delete=false
+spec:
+  refreshInterval: 1h
+  secretStoreRef:
+    kind: ClusterSecretStore
+    name: {{ $s3.clusterSecretStore | default "backup-s3" }}
+  target:
+    name: {{ $name }}-backup-s3
+  dataFrom:
+    - extract:
+        key: {{ $s3.remoteKey | default "backup-s3" }}
+---
+apiVersion: barmancloud.cnpg.io/v1
+kind: ObjectStore
+metadata:
+  name: {{ $name }}-backup
+  annotations:
+    argocd.argoproj.io/sync-wave: "-1"
+    argocd.argoproj.io/sync-options: SkipDryRunOnMissingResource=true,Delete=false
+spec:
+  retentionPolicy: {{ $b.retentionPolicy | default "7d" | quote }}
+  configuration:
+    destinationPath: {{ printf "%s/%s" (trimSuffix "/" $path) .Release.Namespace | quote }}
+    {{- with $s3.endpointURL }}
+    endpointURL: {{ . | quote }}
+    {{- end }}
+    s3Credentials:
+      accessKeyId:
+        name: {{ $name }}-backup-s3
+        key: ACCESS_KEY_ID
+      secretAccessKey:
+        name: {{ $name }}-backup-s3
+        key: ACCESS_SECRET_KEY
+    wal:
+      compression: gzip
+    data:
+      compression: gzip
+  instanceSidecarConfiguration:
+    resources:
+      requests: {cpu: 10m, memory: 64Mi}
+      limits: {memory: 512Mi}
+---
+apiVersion: postgresql.cnpg.io/v1
+kind: ScheduledBackup
+metadata:
+  name: {{ $name }}-backup
+  annotations:
+    argocd.argoproj.io/sync-options: SkipDryRunOnMissingResource=true,Delete=false
+spec:
+  cluster:
+    name: {{ $name }}
+  # 6 fields (seconds first)
+  schedule: {{ $b.schedule | default "0 0 2 */3 * *" | quote }}
+  immediate: true
+  backupOwnerReference: self
+  method: plugin
+  pluginConfiguration:
+    name: barman-cloud.cloudnative-pg.io
