@@ -1,0 +1,9 @@
+apiVersion: v2
+name: seaweedfs
+description: kinops seaweedfs (wraps the upstream chart)
+type: application
+version: 0.1.0
+dependencies:
+  - name: seaweedfs
+    repository: https://seaweedfs.github.io/seaweedfs/helm
+    version: 4.52.0

@@ -34,6 +34,10 @@ spec:
           - app: cloudnative-pg
             namespace: cnpg-system
             stage: "2"
+          # In-cluster S3: target of the Postgres backups (Barman Cloud plugin). Stage 3: its keys come from external-secrets
+          - app: seaweedfs
+            namespace: seaweedfs
+            stage: "3"
           - app: infisical
             namespace: infisical
             stage: "3"

@@ -54,6 +54,14 @@ cnpg-cluster:
     walStorage:
       size: 1Gi
       storageClass: openebs-hostpath
+    # Backups: WAL archiving + base backups to the ObjectStore below (Barman Cloud plugin)
+    plugins:
+      - name: barman-cloud.cloudnative-pg.io
+        # CRD default, explicit: otherwise ArgoCD shows the Cluster OutOfSync
+        enabled: true
+        isWALArchiver: true
+        parameters:
+          barmanObjectName: infisical-backup
     enableSuperuserAccess: false
     roles:
       - name: infisical
@@ -71,6 +79,32 @@ cnpg-cluster:
       - name: infisical
         owner: infisical
         secretName: infisical-cnpg
+  # Base backup every 3 days at 02:00 (WAL is archived continuously): point-in-time recovery
+  scheduledBackup:
+    plugin:
+      enabled: true
+      scheduledBackup: "0 0 2 */3 * *"
+  # S3 target: in-cluster SeaweedFS (seaweedfs component), 7 days kept.
+  # Keys: Secret infisical-backup-s3, copied from seaweedfs/seaweedfs-s3 (templates/backup-s3.yaml).
+  objectStore:
+    enabled: true
+    name: infisical-backup
+    spec:
+      retentionPolicy: 7d
+      configuration:
+        destinationPath: s3://postgres/infisical
+        endpointURL: http://seaweedfs-s3.seaweedfs.svc:8333
+        s3Credentials:
+          accessKeyId:
+            name: infisical-backup-s3
+            key: ACCESS_KEY_ID
+          secretAccessKey:
+            name: infisical-backup-s3
+            key: ACCESS_SECRET_KEY
+        wal:
+          compression: zstd
+        data:
+          compression: gzip
 # Valkey (BSD, Redis protocol) for Infisical queues/cache: official chart, no persistence (cache only).
 # Service infisical-valkey:6379; password VALKEY_PASSWORD from infisical-secrets (ExternalSecret templates/secrets.yaml, never in Git).
 valkey:

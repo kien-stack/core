@@ -72,6 +72,7 @@ If your fork is private (GitLab, Gitea, private GitHub...), the installer needs 
 | Deploy my app | Copy an example from `examples/` to `helm/apps/<my-app>/`: [docs/BOOTSTRAP-APP.md](docs/BOOTSTRAP-APP.md) |
 | Understand the repo layout | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) |
 | Tune a component | Edit `helm/platform/<component>/values.yaml` |
+| Back up a Postgres | Infisical's is backed up to the in-cluster S3 (SeaweedFS), 7 days, point-in-time. For your own `cnpg-cluster`: copy `plugins`, `objectStore` and `scheduledBackup` from `helm/platform/infisical/values.yaml` |
 
 Full docs: https://shop.kien.cc/docs
 
