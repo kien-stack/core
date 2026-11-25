@@ -243,6 +243,8 @@ bootstrap_secrets() {
   if has seaweedfs; then
     local ak sk; ak="$(randpw 20)"; sk="$(randpw 40)"
     ensure_secret seaweedfs seaweedfs-s3 "seaweedfs_s3_config={\"identities\":[{\"name\":\"admin\",\"credentials\":[{\"accessKey\":\"$ak\",\"secretKey\":\"$sk\"}],\"actions\":[\"Admin\",\"Read\",\"List\",\"Tagging\",\"Write\"]}]}" "accessKey=$ak" "secretKey=$sk"
+    # Same keys for the Postgres backups of infisical (cnpg-cluster objectStore)
+    has infisical && ensure_secret infisical infisical-backup-s3 "ACCESS_KEY_ID=$ak" "ACCESS_SECRET_KEY=$sk"
   fi
   has renovate && ensure_secret renovate renovate-env "RENOVATE_TOKEN=${RENOVATE_TOKEN:-}"
   return 0
