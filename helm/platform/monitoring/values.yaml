@@ -161,6 +161,81 @@ victoria-metrics-single:
     serviceMonitor:
       enabled: true
 
+# Daily backup of VictoriaMetrics to the in-cluster S3 (SeaweedFS, bucket monitoring), with vmbackup (open source).
+# Incremental: only new data is uploaded. S3 keys: templates/backup-s3.yaml.
+# Restore: scale the VictoriaMetrics StatefulSet to 0, then run a Job with image victoriametrics/vmrestore (same tag),
+# the PVC mounted read-write at /storage and the secret vmbackup-s3 mounted at /creds:
+#   vmrestore -src=s3://monitoring/victoria-metrics -storageDataPath=/storage -customS3Endpoint=http://seaweedfs-s3.seaweedfs.svc:8333 -credsFilePath=/creds/credentials
+# then scale back to 1.
+vmbackup:
+  enabled: true
+  fullnameOverride: vmbackup
+  defaultPodOptions:
+    imagePullSecrets: []
+    automountServiceAccountToken: false
+    topologySpreadConstraints: []
+    # Same node as VictoriaMetrics: its disk (RWO) is mounted read-only below
+    affinity:
+      podAffinity:
+        requiredDuringSchedulingIgnoredDuringExecution:
+          - topologyKey: kubernetes.io/hostname
+            labelSelector:
+              matchLabels:
+                app: server
+                app.kubernetes.io/name: victoria-metrics-single
+  controller:
+    type: cronjob
+    cronjob:
+      schedule: "0 2 * * *"
+      concurrencyPolicy: Forbid
+      successfulJobsHistory: 1
+      failedJobsHistory: 1
+      backoffLimit: 2
+    containers:
+      main:
+        image:
+          # Same version as VictoriaMetrics (chart victoria-metrics-single 0.51.0)
+          repository: victoriametrics/vmbackup
+          tag: v1.156.0
+          digest: sha256:f2b1c03f4ca75392e9e8a67dc88d51f7eb7e950dbe0fa14e8c78b5f34f3c40ea
+        args:
+          - -storageDataPath=/storage
+          - -snapshot.createURL=http://monitoring-victoria-metrics-single-server:8428/snapshot/create
+          - -dst=s3://monitoring/victoria-metrics
+          - -customS3Endpoint=http://seaweedfs-s3.seaweedfs.svc:8333
+          - -credsFilePath=/creds/credentials
+        probes:
+          liveness:
+            enabled: false
+          readiness:
+            enabled: false
+          startup:
+            enabled: false
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop: [ALL]
+        resources:
+          requests: {cpu: 10m, memory: 64Mi}
+          limits: {memory: 256Mi}
+  service:
+    main:
+      enabled: false
+  persistence:
+    storage:
+      type: persistentVolumeClaim
+      existingClaim: server-volume-monitoring-victoria-metrics-single-server-0
+      globalMounts:
+        - path: /storage
+          readOnly: true
+    creds:
+      type: secret
+      name: vmbackup-s3
+      globalMounts:
+        - path: /creds
+          readOnly: true
+
 # VictoriaLogs single node: pod logs
 victoria-logs-single:
   enabled: true

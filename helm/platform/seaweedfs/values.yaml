@@ -38,6 +38,7 @@ seaweedfs:
       existingConfigSecret: seaweedfs-s3
       createBuckets:
         - name: postgres
+        - name: monitoring
   s3:
     enabled: false
 
@@ -53,6 +54,7 @@ networkPolicy:
       ports:
         - 8333
 
-# Namespaces allowed to copy the S3 keys (External Secrets) for their Postgres backups.
+# Namespaces allowed to copy the S3 keys (External Secrets) for their backups.
 s3Readers:
   - infisical
+  - monitoring
