@@ -155,7 +155,8 @@ victoria-metrics-single:
 
 # Daily backup of VictoriaMetrics to the in-cluster S3 (SeaweedFS, bucket monitoring), with vmbackup (open source).
 # Incremental: only new data is uploaded. S3 keys: templates/backup-s3.yaml.
-# Restore: scale the VictoriaMetrics StatefulSet to 0, run vmrestore with the same image, PVC (read-write) and creds:
+# Restore: scale the VictoriaMetrics StatefulSet to 0, then run a Job with image victoriametrics/vmrestore (same tag),
+# the PVC mounted read-write at /storage and the secret vmbackup-s3 mounted at /creds:
 #   vmrestore -src=s3://monitoring/victoria-metrics -storageDataPath=/storage -customS3Endpoint=http://seaweedfs-s3.seaweedfs.svc:8333 -credsFilePath=/creds/credentials
 # then scale back to 1.
 vmbackup:
