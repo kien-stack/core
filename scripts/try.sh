@@ -102,7 +102,7 @@ KSTACK_DEMO=1 KSTACK_PWD=$KSTACK_PWD bash install.sh install || exit $?
 raw=https://raw.githubusercontent.com/kinopshq/core/main/scripts
 b=$(printf '%*s' 39 ''); b=${b// /─}
 printf '\n %s─── Next steps %s%s\n' "${C_D}" "$b" "${C_0}"
-printf ' %-16s %s\n' "1. Real install" "curl -fsSL $raw/install.sh | bash" "2. More packs" "https://shop.kien.cc"
+printf ' %-16s %s\n' "1. Real install" "curl -fsSL $raw/install.sh | bash" "2. More packs" "https://kinops.dev"
 b=$(printf '%*s' 43 ''); b=${b// /─}
 printf '\n %s─── Remove %s%s\n' "${C_D}" "$b" "${C_0}"
 printf ' %s\n' "curl -fsSL $raw/try.sh | bash -s uninstall"

@@ -76,7 +76,7 @@ If your fork is private (GitLab, Gitea, private GitHub...), the installer needs 
 | Add a Grafana dashboard | ConfigMap with label `grafana_dashboard: "1"` + annotation `grafana_folder: <folder>`, or a grafana.com id in `helm/platform/monitoring/values.yaml` |
 | Back up a Postgres | Infisical's is backed up to the in-cluster S3 (SeaweedFS), 7 days, point-in-time. For your own `cnpg-cluster`: copy `plugins`, `objectStore` and `scheduledBackup` from `helm/platform/infisical/values.yaml` |
 
-Full docs: https://shop.kien.cc/docs
+Full docs: https://kinops.dev/docs
 
 ## Uninstall
 
