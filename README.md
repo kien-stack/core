@@ -4,20 +4,22 @@ A free, open source GitOps platform for Kubernetes, installed in one command.
 Everything lives in your Git repo and ArgoCD applies it.
 
 **Included:** ArgoCD, Traefik (Gateway API), cert-manager, External Secrets + Infisical,
-CloudNativePG (Postgres backups to SeaweedFS S3), Reloader, metrics-server, OpenEBS and monitoring
+CloudNativePG, SeaweedFS (S3 in your cluster), Reloader, metrics-server, OpenEBS and monitoring
 (Prometheus, Grafana, VictoriaMetrics, VictoriaLogs). Optional: Cilium, external-dns.
 
-This is the platform base of every pack, monitoring included. In Community, Grafana uses a local admin (no SSO).
+Postgres databases are backed up to SeaweedFS, with point-in-time restore.
+
+This is the platform base of every pack, monitoring and S3 included. In Community, Grafana uses a local admin (no SSO).
 
 ## Packs
 
 | Pack | What you get | Status |
 |---|---|---|
-| **Community** (this repo) | Platform base: GitOps platform above + monitoring (Grafana with a local admin, no SSO) | Free, open source |
-| **AI Platform** | Platform base + Authentik SSO (Grafana and apps log in with it) + self-hosted AI (Ollama, LiteLLM, Onyx, Langfuse, Coder, OpenClaw) + MCP servers behind LiteLLM (ArgoCD, VictoriaMetrics, VictoriaLogs, Coder) | Available |
-| **Enterprise** | AI Platform + Velero backups, Argo Rollouts, Image Updater, Radar, Renovate. Planned: HA, multi-DC, disaster recovery | Available (HA, multi-DC, DR planned) |
+| **Community** (this repo) | Platform base: GitOps, secrets, Postgres with backups to S3, S3 in your cluster, monitoring (local Grafana admin, no SSO) | Free, open source |
+| **AI Platform** | Community + single sign-on (Authentik) + your own AI: chat over your docs (Onyx), local LLMs (Ollama), LLM gateway (LiteLLM), tracing (Langfuse), agent (OpenClaw), dev environments (Coder), MCP tools for your agents (ArgoCD, metrics, logs, Coder) | Available |
+| **Enterprise** | AI Platform + resilience: HA Postgres, distributed storage, volume backups outside the cluster, disaster recovery, multi-DC. Plus AI Ops, progressive delivery, image updates, read-only cluster view | Available (HA, multi-DC, DR planned) |
 
-Enterprise, shipped today: Velero backups (in-cluster SeaweedFS S3; add an off-cluster S3 location for disaster recovery), Argo Rollouts, Image Updater, Radar, Renovate. Planned, not available yet: HA, multi-DC, full disaster recovery.
+Enterprise, shipped today: Velero volume backups, Argo Rollouts, Image Updater, Radar, Renovate. Planned, not available yet: HA Postgres, distributed storage, multi-DC, tested disaster recovery.
 
 ## Try it
 
