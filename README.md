@@ -7,7 +7,7 @@ Everything lives in your Git repo and ArgoCD applies it.
 CloudNativePG, SeaweedFS (S3 in your cluster), Reloader, metrics-server, OpenEBS and monitoring
 (Prometheus, Grafana, VictoriaMetrics, VictoriaLogs). Optional: Cilium, external-dns.
 
-Postgres databases are backed up to SeaweedFS, with point-in-time restore.
+Postgres databases (point-in-time restore) and the metrics history (daily vmbackup) are backed up to SeaweedFS.
 
 This is the platform base of every pack, monitoring and S3 included. In Community, Grafana uses a local admin (no SSO).
 
@@ -15,7 +15,7 @@ This is the platform base of every pack, monitoring and S3 included. In Communit
 
 | Pack | What you get | Status |
 |---|---|---|
-| **Community** (this repo) | Platform base: GitOps, secrets, Postgres with backups to S3, S3 in your cluster, monitoring (local Grafana admin, no SSO) | Free, open source |
+| **Community** (this repo) | Platform base: GitOps, secrets, Postgres and metrics backed up to S3, S3 in your cluster, monitoring (local Grafana admin, no SSO) | Free, open source |
 | **AI Platform** | Community + single sign-on (Authentik) + your own AI: chat over your docs (Onyx), local LLMs (Ollama), LLM gateway (LiteLLM), tracing (Langfuse), agent (OpenClaw), dev environments (Coder), MCP tools for your agents (ArgoCD, metrics, logs, Coder) | Available |
 | **Enterprise** | AI Platform + resilience: HA Postgres, distributed storage, volume backups outside the cluster, disaster recovery, multi-DC. Plus AI Ops, progressive delivery, image updates, read-only cluster view | Available (HA, multi-DC, DR planned) |
 
