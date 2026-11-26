@@ -68,9 +68,10 @@ render() { # <root> <chart>: rendered manifests, CRDs included
   helm template "$2" "$d" -n "$(ns_of "$2")" -f "$1/cluster.yaml" --include-crds
 }
 
-apply_crds() { # <root> <chart>: like ArgoCD, apply (and upgrade) CRDs; Helm never upgrades crds/
+apply_crds() { # <root> <chart>: like ArgoCD (server-side apply), apply CRDs and admission policies,
+  # and take them over from another owner (k3s >= 1.37 ships Gateway API CRDs + safe-upgrades policy); Helm never upgrades crds/
   local crds
-  crds=$(render "$1" "$2" | yq "select(.kind == \"CustomResourceDefinition\")
+  crds=$(render "$1" "$2" | yq "select(.kind == \"CustomResourceDefinition\" or .kind == \"ValidatingAdmissionPolicy*\")
     | .metadata.labels.\"app.kubernetes.io/managed-by\" = \"Helm\"
     | .metadata.annotations.\"meta.helm.sh/release-name\" = \"$2\"
     | .metadata.annotations.\"meta.helm.sh/release-namespace\" = \"$(ns_of "$2")\"")
