@@ -68,10 +68,9 @@ render() { # <root> <chart>: rendered manifests, CRDs included
   helm template "$2" "$d" -n "$(ns_of "$2")" -f "$1/cluster.yaml" --include-crds
 }
 
-apply_crds() { # <root> <chart>: like ArgoCD (server-side apply), apply CRDs and admission policies,
-  # and take them over from another owner (k3s >= 1.37 ships Gateway API CRDs + safe-upgrades policy); Helm never upgrades crds/
+apply_crds() { # <root> <chart>: like ArgoCD, apply (and upgrade) CRDs; Helm never upgrades crds/
   local crds
-  crds=$(render "$1" "$2" | yq "select(.kind == \"CustomResourceDefinition\" or .kind == \"ValidatingAdmissionPolicy*\")
+  crds=$(render "$1" "$2" | yq "select(.kind == \"CustomResourceDefinition\")
     | .metadata.labels.\"app.kubernetes.io/managed-by\" = \"Helm\"
     | .metadata.annotations.\"meta.helm.sh/release-name\" = \"$2\"
     | .metadata.annotations.\"meta.helm.sh/release-namespace\" = \"$(ns_of "$2")\"")
@@ -160,7 +159,8 @@ t0=$SECONDS
 git -C "$ROOT" worktree add --detach "$tmp/base" "$BASE_REF" >/dev/null 2>&1
 BASE=$tmp/base
 k3d cluster create "$CLUSTER" --image "$K3S_IMAGE" --wait --timeout 180s \
-  --k3s-arg '--disable=traefik@server:0' --k3s-arg '--disable=metrics-server@server:0' >/dev/null
+  --k3s-arg '--disable=traefik@server:0' --k3s-arg '--disable=metrics-server@server:0' \
+  --k3s-arg '--disable=gateway-api-crd@server:0' >/dev/null # plain Kubernetes: no k3s add-ons, kinops brings its own
 for x in $(yq -r '.spec.generators[0].list.elements[].namespace' "$appset" | sort -u); do
   kubectl create ns "$x" --dry-run=client -o yaml | kubectl apply -f - >/dev/null
 done
