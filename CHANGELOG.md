@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.4.7](https://github.com/kinopshq/core/compare/v0.4.6...v0.4.7) (2026-11-26)
+
+
+### Bug fixes
+
+* kinops folder names in try.sh/install.sh, AI Platform and Enterprise marked Coming soon in README ([#94](https://github.com/kinopshq/core/issues/94)) ([e9077f7](https://github.com/kinopshq/core/commit/e9077f7a834e43ba273ed7de64ded331e69b7400))
+
 ## [0.4.6](https://github.com/kinopshq/core/compare/v0.4.5...v0.4.6) (2026-11-26)
 
 
