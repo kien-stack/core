@@ -118,7 +118,7 @@ jobs:
       - name: Upgrade test
         env:
           K3S_IMAGE: rancher/k3s:${{ env.K3S_VERSION }}
-        run: hack/chart-upgrade-test.sh "${{ matrix.chart }}" "origin/${{ github.base_ref }}"
+        run: bash hack/chart-upgrade-test.sh "${{ matrix.chart }}" "origin/${{ github.base_ref }}"
 
   result:
     # Single required check for branch protection / Renovate automerge.
