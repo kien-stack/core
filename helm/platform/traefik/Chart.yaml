@@ -7,7 +7,7 @@ dependencies:
   - name: traefik
     repository: https://traefik.github.io/charts
     version: 42.2.0
-  # Gateway API CRDs (standard channel); the Traefik CRDs come with the traefik chart itself
-  - name: traefik-crds
-    repository: https://traefik.github.io/charts
-    version: 1.18.0
+  # Gateway API CRDs (standard channel, same chart as k3s >= 1.37); the Traefik CRDs come with the traefik chart itself
+  - name: gateway-api-crd
+    repository: https://k3s-io.github.io/k3s-charts
+    version: 1.7.1
