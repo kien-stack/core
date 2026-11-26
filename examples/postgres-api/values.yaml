@@ -55,7 +55,7 @@ app-template:
       migrate:
         image:
           repository: ghcr.io/cloudnative-pg/postgresql
-          tag: "18-standard-trixie"
+          tag: "19-standard-trixie"
           digest: ""
         env: &pg
           PGHOST: {valueFrom: {secretKeyRef: {name: postgres-api-cnpg, key: DB_HOST}}}
