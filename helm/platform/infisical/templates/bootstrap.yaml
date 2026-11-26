@@ -75,7 +75,7 @@ data:
     until curl -sf $API/status >/dev/null; do echo "waiting for Infisical"; sleep 5; done
     j() { curl -sS -H "content-type: application/json" "$@"; }
     PW=$(cat /admin/password); EMAIL=$(cat /admin/email)
-    R=$(j -X POST $API/v1/admin/bootstrap -d "{\"email\":\"$EMAIL\",\"password\":\"$PW\",\"organization\":\"{{ dig "organization" "kien-stack" $b }}\"}")
+    R=$(j -X POST $API/v1/admin/bootstrap -d "{\"email\":\"$EMAIL\",\"password\":\"$PW\",\"organization\":\"{{ dig "organization" "kinops" $b }}\"}")
     T=$(echo "$R" | jq -r '.identity.credentials.token // empty')
     [ -n "$T" ] || { echo "bootstrap failed: $(echo "$R" | jq -c .message). Already bootstrapped without the identity? Reinstall Infisical (delete its namespace)."; exit 1; }
     ORG=$(echo "$R" | jq -r .organization.id); H="Authorization: Bearer $T"
