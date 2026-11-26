@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.4.6](https://github.com/kinopshq/core/compare/v0.4.5...v0.4.6) (2026-11-26)
+
+
+### Features
+
+* **backup:** Postgres backups to in-cluster S3 (SeaweedFS) with the Barman Cloud plugin ([#86](https://github.com/kinopshq/core/issues/86)) ([d3cb99d](https://github.com/kinopshq/core/commit/d3cb99dec5608b1216bdddd454ee16432b92f566))
+* **monitoring:** daily VictoriaMetrics backup to SeaweedFS S3 (vmbackup CronJob) ([#91](https://github.com/kinopshq/core/issues/91)) ([b9cf825](https://github.com/kinopshq/core/commit/b9cf825d4ea413e7958e32e1fa10feb2b64745ca))
+* **monitoring:** Grafana dashboards sorted in folders ([#89](https://github.com/kinopshq/core/issues/89)) ([5727e89](https://github.com/kinopshq/core/commit/5727e8970e9a5f2b2a123ac57266be268d1af34b))
+
+
+### Documentation
+
+* **argocd:** progressive sync stages and dependencies (mermaid) ([#88](https://github.com/kinopshq/core/issues/88)) ([2d13ce9](https://github.com/kinopshq/core/commit/2d13ce9e576168b52fd0ecd88585905db159b826))
+* **monitoring:** README with VictoriaMetrics backup and restore steps ([#92](https://github.com/kinopshq/core/issues/92)) ([2bc43d4](https://github.com/kinopshq/core/commit/2bc43d411291872628de5a4e69f627253048de5b))
+* **readme:** packs and features as on the shop (S3, SSO in AI Platform, resilience in Enterprise) ([#90](https://github.com/kinopshq/core/issues/90)) ([734065a](https://github.com/kinopshq/core/commit/734065a9923bc870b34a2d2732f24d0cef79ba6d))
+
 ## [0.4.5](https://github.com/kinopshq/core/compare/v0.4.4...v0.4.5) (2026-11-24)
 
 
