@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Upgrade test for one platform chart, on a throwaway k3d cluster (CI job "Upgrade" in charts-test.yaml):
+# Upgrade test for one platform chart, on a throwaway kind cluster (upstream Kubernetes, no distro add-ons) (CI job "Upgrade" in charts-test.yaml):
 #   1. its dependencies, from the base ref (CI: latest release tag);
 #   2. the chart, from the base ref;
 #   3. helm upgrade to this working tree.
@@ -12,7 +12,9 @@ BASE_REF=${2:-$(git -C "$(dirname "$0")" describe --tags --abbrev=0 --match "v*"
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
 n=$(basename "$CHART")
 TIMEOUT=${TIMEOUT:-15m}
-K3S_IMAGE=${K3S_IMAGE:-rancher/k3s:v1.33.13-k3s1}
+NODE_IMAGE=${NODE_IMAGE:-kindest/node:v1.37.0}
+# renovate: datasource=docker depName=registry.k8s.io/cloud-provider-kind/cloud-controller-manager
+CPK_VERSION=v0.12.0
 CLUSTER=${CLUSTER:-upg-$n}
 
 # Installed (from the base branch) before the chart.
@@ -35,14 +37,15 @@ appset=$ROOT/argocd/applications/platform/appset.yaml
 ns_of() { yq -r ".spec.generators[0].list.elements[] | select(.app == \"$1\") | .namespace" "$appset"; }
 ns=$(ns_of "$n")
 [ -n "$ns" ] || { echo "$n is not in the platform ApplicationSet: skipped"; exit 0; }
-# cilium replaces the CNI of the node: not testable on a shared k3d cluster.
+# cilium replaces the CNI of the node: not testable on a shared kind cluster.
 [ "$n" != cilium ] || { echo "cilium: skipped (CNI)"; exit 0; }
 
 tmp=$(mktemp -d)
 export KUBECONFIG=$tmp/kubeconfig
 cleanup() {
-  [ "${KEEP:-}" = 1 ] && { echo "kept: k3d cluster $CLUSTER, KUBECONFIG=$KUBECONFIG"; return; }
-  k3d cluster delete "$CLUSTER" >/dev/null 2>&1 || true
+  [ "${KEEP:-}" = 1 ] && { echo "kept: kind cluster $CLUSTER, KUBECONFIG=$KUBECONFIG"; return; }
+  kind delete cluster --name "$CLUSTER" >/dev/null 2>&1 || true
+  docker rm -f cloud-provider-kind >/dev/null 2>&1 || true
   git -C "$ROOT" worktree remove --force "$tmp/base" >/dev/null 2>&1 || true
   rm -rf "$tmp"
 }
@@ -158,9 +161,11 @@ hashes() { # <namespace>: name + short sha256 of each Secret written by an Exter
 t0=$SECONDS
 git -C "$ROOT" worktree add --detach "$tmp/base" "$BASE_REF" >/dev/null 2>&1
 BASE=$tmp/base
-k3d cluster create "$CLUSTER" --image "$K3S_IMAGE" --wait --timeout 180s \
-  --k3s-arg '--disable=traefik@server:0' --k3s-arg '--disable=metrics-server@server:0' \
-  --k3s-arg '--disable=gateway-api-crd@server:0' >/dev/null # plain Kubernetes: no k3s add-ons, kinops brings its own
+kind create cluster --name "$CLUSTER" --image "$NODE_IMAGE" --wait 180s >/dev/null 2>&1
+# LoadBalancer Services (traefik): the kind cloud provider, like a cloud or MetalLB would
+docker ps -q -f name=cloud-provider-kind | grep -q . ||
+  docker run -d --rm --name cloud-provider-kind --network kind -v /var/run/docker.sock:/var/run/docker.sock \
+    "registry.k8s.io/cloud-provider-kind/cloud-controller-manager:$CPK_VERSION" >/dev/null
 for x in $(yq -r '.spec.generators[0].list.elements[].namespace' "$appset" | sort -u); do
   kubectl create ns "$x" --dry-run=client -o yaml | kubectl apply -f - >/dev/null
 done
