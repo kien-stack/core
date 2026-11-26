@@ -196,7 +196,7 @@ vmbackup:
         image:
           # Same version as VictoriaMetrics (chart victoria-metrics-single 0.51.0)
           repository: victoriametrics/vmbackup
-          tag: v1.156.0
+          tag: v1.157.0
           digest: sha256:f2b1c03f4ca75392e9e8a67dc88d51f7eb7e950dbe0fa14e8c78b5f34f3c40ea
         args:
           - -storageDataPath=/storage
