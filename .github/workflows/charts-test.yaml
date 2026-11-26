@@ -95,7 +95,7 @@ jobs:
   upgrade:
     # Base branch version of the chart, then helm upgrade to this commit, on a throwaway k3d cluster.
     # Dependencies come from the base branch (hack/chart-upgrade-test.sh).
-    name: Upgrade ${{ matrix.chart }}
+    name: Upgrade ${{ matrix.chart }} (from ${{ matrix.from }})
     needs: changes
     if: github.event_name == 'pull_request' && needs.changes.outputs.platform != '[]'
     runs-on: ubuntu-latest
@@ -104,6 +104,8 @@ jobs:
       fail-fast: false
       matrix:
         chart: ${{ fromJSON(needs.changes.outputs.platform) }}
+        # release: what users run today (latest v* tag). main: this PR alone.
+        from: [release, main]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
@@ -118,7 +120,13 @@ jobs:
       - name: Upgrade test
         env:
           K3S_IMAGE: rancher/k3s:${{ env.K3S_VERSION }}
-        run: bash hack/chart-upgrade-test.sh "${{ matrix.chart }}" "origin/${{ github.base_ref }}"
+          FROM: ${{ matrix.from }}
+          BASE: origin/${{ github.base_ref }}
+        run: |
+          set -euo pipefail
+          ref=$BASE
+          [ "$FROM" = main ] || ref=$(git describe --tags --abbrev=0 --match "v*" "$BASE")
+          bash hack/chart-upgrade-test.sh "${{ matrix.chart }}" "$ref"
 
   result:
     # Single required check for branch protection / Renovate automerge.
