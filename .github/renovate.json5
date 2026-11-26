@@ -77,6 +77,14 @@
       matchManagers: ['github-actions', 'custom.regex'],
       groupName: 'ci tooling',
       addLabels: ['ci'],
+      semanticCommitType: 'ci', // hidden in the changelog: no release for CI tooling alone
+    },
+    {
+      // config:recommended has a packageRule setting chore(deps), which overrides semanticCommitType above.
+      // release-please hides chore: chart and image updates would never open a release PR.
+      description: 'Charts and images: deps(...) commits, listed under Dependencies and released',
+      matchManagers: ['helmv3', 'helm-values'],
+      semanticCommitType: 'deps',
     },
   ],
 }
