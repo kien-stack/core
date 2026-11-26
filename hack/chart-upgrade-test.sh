@@ -22,9 +22,11 @@ declare -A DEPS=(
   [monitoring]="openebs external-secrets seaweedfs"
   [infisical]="openebs cert-manager cloudnative-pg external-secrets seaweedfs"
 )
-# Only their CRDs (kinds the chart uses: HTTPRoute, PodMonitor).
+# Only their CRDs (Gateway API from traefik: cert-manager enableGatewayAPI, HTTPRoutes; PodMonitor from monitoring).
 declare -A CRDS=(
   [argocd]="traefik"
+  [cert-manager]="traefik"
+  [cloudnative-pg]="traefik"
   [monitoring]="traefik"
   [infisical]="traefik monitoring"
 )
