@@ -19,6 +19,10 @@ env:
   KUBECONFORM_VERSION: "0.7.0"
   # renovate: datasource=github-releases depName=helm/helm
   HELM_VERSION: "v3.19.0"
+  # renovate: datasource=github-releases depName=k3d-io/k3d
+  K3D_VERSION: "v5.9.0"
+  # renovate: datasource=docker depName=rancher/k3s
+  K3S_VERSION: "v1.33.13-k3s1"
 
 jobs:
   changes:
@@ -26,6 +30,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       charts: ${{ steps.list.outputs.charts }}
+      platform: ${{ steps.list.outputs.platform }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
@@ -51,6 +56,7 @@ jobs:
           fi
           echo "$charts"
           echo "charts=$(jq -R -s -c 'split("\n") | map(select(length > 0))' <<<"$charts")" >> "$GITHUB_OUTPUT"
+          echo "platform=$(jq -R -s -c 'split("\n") | map(select(startswith("helm/platform/")))' <<<"$charts")" >> "$GITHUB_OUTPUT"
 
   install:
     name: Template ${{ matrix.chart }}
@@ -86,16 +92,46 @@ jobs:
           # Every NetworkPolicy of ours must target at least one pod (labels can change on chart upgrades).
           python3 hack/netpol-check.py /tmp/rendered.yaml
 
+  upgrade:
+    # Base branch version of the chart, then helm upgrade to this commit, on a throwaway k3d cluster.
+    # Dependencies come from the base branch (hack/chart-upgrade-test.sh).
+    name: Upgrade ${{ matrix.chart }}
+    needs: changes
+    if: github.event_name == 'pull_request' && needs.changes.outputs.platform != '[]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        chart: ${{ fromJSON(needs.changes.outputs.platform) }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 0
+      - uses: azure/setup-helm@9bc31f4ebc9c6b171d7bfbaa5d006ae7abdb4310 # v5
+        with:
+          version: ${{ env.HELM_VERSION }}
+      - name: Install k3d
+        run: |
+          curl -fsSL -o k3d "https://github.com/k3d-io/k3d/releases/download/${K3D_VERSION}/k3d-linux-amd64"
+          sudo install k3d /usr/local/bin/k3d
+      - name: Upgrade test
+        env:
+          K3S_IMAGE: rancher/k3s:${{ env.K3S_VERSION }}
+        run: hack/chart-upgrade-test.sh "${{ matrix.chart }}" "origin/${{ github.base_ref }}"
+
   result:
     # Single required check for branch protection / Renovate automerge.
     name: Charts test result
     if: always()
-    needs: [install]
+    needs: [install, upgrade]
     runs-on: ubuntu-latest
     steps:
       - name: Check
         env:
           INSTALL: ${{ needs.install.result }}
+          UPGRADE: ${{ needs.upgrade.result }}
         run: |
-          echo "install=$INSTALL"
+          echo "install=$INSTALL upgrade=$UPGRADE"
           [ "$INSTALL" = success ] || [ "$INSTALL" = skipped ]
+          [ "$UPGRADE" = success ] || [ "$UPGRADE" = skipped ]
