@@ -19,10 +19,11 @@ env:
   KUBECONFORM_VERSION: "0.7.0"
   # renovate: datasource=github-releases depName=helm/helm
   HELM_VERSION: "v3.19.0"
-  # renovate: datasource=github-releases depName=k3d-io/k3d
-  K3D_VERSION: "v5.9.0"
-  # renovate: datasource=docker depName=rancher/k3s
-  K3S_VERSION: "v1.33.13-k3s1"
+  # renovate: datasource=github-releases depName=kubernetes-sigs/kind
+  KIND_VERSION: "v0.33.0"
+  # Upstream Kubernetes (kind node image): the tests must not depend on a distribution.
+  # renovate: datasource=docker depName=kindest/node
+  KUBERNETES_VERSION: "v1.37.0"
 
 jobs:
   changes:
@@ -93,7 +94,7 @@ jobs:
           python3 hack/netpol-check.py /tmp/rendered.yaml
 
   upgrade:
-    # Latest release (v* tag) of the chart, then helm upgrade to this commit, on a throwaway k3d cluster.
+    # Latest release (v* tag) of the chart, then helm upgrade to this commit, on a throwaway kind cluster.
     # Dependencies come from the same release (hack/chart-upgrade-test.sh).
     name: Upgrade ${{ matrix.chart }}
     needs: changes
@@ -111,13 +112,13 @@ jobs:
       - uses: azure/setup-helm@9bc31f4ebc9c6b171d7bfbaa5d006ae7abdb4310 # v5
         with:
           version: ${{ env.HELM_VERSION }}
-      - name: Install k3d
+      - name: Install kind
         run: |
-          curl -fsSL -o k3d "https://github.com/k3d-io/k3d/releases/download/${K3D_VERSION}/k3d-linux-amd64"
-          sudo install k3d /usr/local/bin/k3d
+          curl -fsSL -o kind "https://github.com/kubernetes-sigs/kind/releases/download/${KIND_VERSION}/kind-linux-amd64"
+          sudo install kind /usr/local/bin/kind
       - name: Upgrade test
         env:
-          K3S_IMAGE: rancher/k3s:${{ env.K3S_VERSION }}
+          NODE_IMAGE: kindest/node:${{ env.KUBERNETES_VERSION }}
           BASE: origin/${{ github.base_ref }}
         run: |
           set -euo pipefail

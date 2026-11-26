@@ -17,6 +17,8 @@
   prConcurrentLimit: 10,
   // Conservative: nothing merges unless CI (charts-test) is green; Renovate waits for checks.
   platformAutomerge: true,
+  // Only what kinops deploys (helm/, argocd/) + CI tooling. Not examples/: users copy and version them.
+  includePaths: ['helm/**', 'argocd/**', '.github/**', 'hack/**', 'install.sh'],
   ignorePaths: ['**/charts/**'],
   // helmv3 manager picks up Chart.yaml dependencies by default (this includes argo-cd: install.sh
   // helm_bootstrap installs helm/platform/argocd, so its version is only pinned in that Chart.yaml).
