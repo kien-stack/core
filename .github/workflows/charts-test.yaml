@@ -22,7 +22,7 @@ env:
   # renovate: datasource=github-releases depName=k3d-io/k3d
   K3D_VERSION: "v5.9.0"
   # renovate: datasource=docker depName=rancher/k3s
-  K3S_VERSION: "v1.33.13-k3s1"
+  K3S_VERSION: "v1.37.2-k3s1"
 
 jobs:
   changes:
@@ -122,7 +122,7 @@ jobs:
         run: |
           set -euo pipefail
           # What users run today: the latest release tag of the base branch.
-          release=$(git describe --tags --abbrev=0 --match "v*" "$BASE")
+          release=$(git rev-parse HEAD) # TEMP: install this branch on k3s 1.37
           bash hack/chart-upgrade-test.sh "${{ matrix.chart }}" "$release"
 
   result:
