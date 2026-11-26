@@ -4,7 +4,7 @@ external-dns:
   sources:
     - gateway-httproute
   policy: upsert-only
-  txtOwnerId: kien-stack
+  txtOwnerId: kinops
   env:
     - name: CF_API_TOKEN
       valueFrom:

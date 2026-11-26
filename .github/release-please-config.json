@@ -17,7 +17,7 @@
   ],
   "packages": {
     ".": {
-      "package-name": "kien-stack-essential"
+      "package-name": "kinops-core"
     }
   }
 }
