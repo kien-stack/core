@@ -9,7 +9,7 @@ set -euo pipefail
 KSTACK_PWD=$PWD   # where the user runs this: install.sh prints the commands relative to it
 REPO=${KSTACK_SOURCE:-https://github.com/kinopshq/core}
 REF=${KSTACK_REF:-main}
-DIR=${KSTACK_DIR:-$HOME/kien-stack-try}
+DIR=${KSTACK_DIR:-$HOME/kinops-try}
 # colors: only on a TTY, honour NO_COLOR and TERM=dumb (bash 3.2 safe)
 kc() { [ -t "$1" ] && [ -z "${NO_COLOR:-}" ] && [ "${TERM:-dumb}" != dumb ]; }
 # shellcheck disable=SC2034
