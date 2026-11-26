@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.4.8](https://github.com/kinopshq/core/compare/v0.4.7...v0.4.8) (2026-11-26)
+
+
+### Bug fixes
+
+* **renovate:** chart and image updates as deps(...) so they trigger a release ([#100](https://github.com/kinopshq/core/issues/100)) ([a91d81d](https://github.com/kinopshq/core/commit/a91d81d8fea224297dd4c3399f6605d5b219deda))
+* **traefik:** Gateway API CRDs v1.7.0 for Kubernetes 1.37 ([#123](https://github.com/kinopshq/core/issues/123)) ([d08da58](https://github.com/kinopshq/core/commit/d08da5817422bda6b08c04949613edcfb1d77491))
+
 ## [0.4.7](https://github.com/kinopshq/core/compare/v0.4.6...v0.4.7) (2026-11-26)
 
 
