@@ -8,7 +8,7 @@ app-template:
         image:
           # your image
           repository: ghcr.io/stefanprodan/podinfo
-          tag: "6.7.1"
+          tag: "6.17.0"
           digest: ""
         env:
           PORT: "9898"
