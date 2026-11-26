@@ -80,7 +80,7 @@ app-template:
         image:
           # your image
           repository: postgrest/postgrest
-          tag: v14.18
+          tag: v16.6
           digest: ""
         env:
           <<: *pg
