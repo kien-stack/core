@@ -7,7 +7,7 @@ app-template:
         image:
           # your agent image
           repository: busybox
-          tag: "1.37"
+          tag: "1.38"
           digest: ""
         # No port to check: turn off the default probes.
         probes:
