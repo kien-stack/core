@@ -16,13 +16,13 @@ permissions:
 
 env:
   # renovate: datasource=github-releases depName=yannh/kubeconform
-  KUBECONFORM_VERSION: "0.7.0"
+  KUBECONFORM_VERSION: "0.8.0"
   # renovate: datasource=github-releases depName=helm/helm
-  HELM_VERSION: "v3.19.0"
+  HELM_VERSION: "v3.22.1"
   # renovate: datasource=github-releases depName=k3d-io/k3d
   K3D_VERSION: "v5.9.0"
   # renovate: datasource=docker depName=rancher/k3s
-  K3S_VERSION: "v1.33.13-k3s1"
+  K3S_VERSION: "v1.37.2-k3s1"
 
 jobs:
   changes:
@@ -69,7 +69,7 @@ jobs:
         chart: ${{ fromJSON(needs.changes.outputs.charts) }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-      - uses: azure/setup-helm@9bc31f4ebc9c6b171d7bfbaa5d006ae7abdb4310 # v5
+      - uses: azure/setup-helm@2f5e7bc67f1f9972ab16657bb795f36d8f04de0e # v5
         with:
           version: ${{ env.HELM_VERSION }}
       - name: Install kubeconform
@@ -108,7 +108,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           fetch-depth: 0
-      - uses: azure/setup-helm@9bc31f4ebc9c6b171d7bfbaa5d006ae7abdb4310 # v5
+      - uses: azure/setup-helm@2f5e7bc67f1f9972ab16657bb795f36d8f04de0e # v5
         with:
           version: ${{ env.HELM_VERSION }}
       - name: Install k3d
