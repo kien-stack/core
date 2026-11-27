@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.4.9](https://github.com/kinopshq/core/compare/v0.4.8...v0.4.9) (2026-11-27)
+
+
+### Dependencies
+
+* **deps:** update helm release argo-cd to v10.20.0 ([#109](https://github.com/kinopshq/core/issues/109)) ([ec3ad44](https://github.com/kinopshq/core/commit/ec3ad446d2007ac65fb96fc4cea4fd8fca87c369))
+* **deps:** update helm release cilium to v1.20.5 ([#103](https://github.com/kinopshq/core/issues/103)) ([2a6b446](https://github.com/kinopshq/core/commit/2a6b446bedde488a89b99350c3d63b1af004a19e))
+* **deps:** update helm release cloudnative-pg to v0.29.2 ([#104](https://github.com/kinopshq/core/issues/104)) ([750af5b](https://github.com/kinopshq/core/commit/750af5b14e66279dc9e50033046b721c02f85c4c))
+* **deps:** update helm release external-dns to v1.24.0 ([#110](https://github.com/kinopshq/core/issues/110)) ([02da904](https://github.com/kinopshq/core/commit/02da904dbf9c97742912fd929c806f2b6b914ef4))
+* **deps:** update helm release external-secrets to v2.15.0 ([#111](https://github.com/kinopshq/core/issues/111)) ([b508d8b](https://github.com/kinopshq/core/commit/b508d8b981ea9afbe126593c508a439fa6abf21b))
+* **deps:** update helm release infisical-standalone to v1.12.6 ([#105](https://github.com/kinopshq/core/issues/105)) ([22439bc](https://github.com/kinopshq/core/commit/22439bc5f3f082295e36ffc07313ab7b52d4d9ac))
+* **deps:** update helm release kube-prometheus-stack to v94 ([#118](https://github.com/kinopshq/core/issues/118)) ([0ec4ab9](https://github.com/kinopshq/core/commit/0ec4ab9a935d673247dfe51fb7620a29c05d4815))
+* **deps:** update helm release reloader to v2.2.21 ([#106](https://github.com/kinopshq/core/issues/106)) ([cdd6e1b](https://github.com/kinopshq/core/commit/cdd6e1b349193ca97ac18ecf5d767fd1b2523e54))
+* **deps:** update helm release seaweedfs to v4.55.0 ([#112](https://github.com/kinopshq/core/issues/112)) ([2ebf280](https://github.com/kinopshq/core/commit/2ebf2805c9ec2e841efd9d96ad1f943ce16ca797))
+* **deps:** update helm release valkey to v1 ([#120](https://github.com/kinopshq/core/issues/120)) ([e11dbac](https://github.com/kinopshq/core/commit/e11dbacd7279ae50b63530d257626d404e8920bf))
+
 ## [0.4.8](https://github.com/kinopshq/core/compare/v0.4.7...v0.4.8) (2026-11-26)
 
 
