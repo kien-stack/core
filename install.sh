@@ -55,8 +55,9 @@ busy() { [ -z "$TTY" ] || { clr; printf ' %s◌%s %-12s %s' "${C_D}" "${C_0}" "$
 step() { clr; printf ' %s✓%s %-12s %s\n' "${C_G}" "${C_0}" "$1" "$2"; }
 rule() { local b; printf -v b '%*s' $(( 50 - ${#1} )) ''; printf '\n %s─── %s %s%s\n' "${C_D}" "$1" "${b// /─}" "${C_0}"; }
 version() {
-  local v; v=$(git -C "$ROOT" describe --tags --abbrev=0 2>/dev/null) \
-    || v=$(sed -n 's/^## \[\{0,1\}\([0-9][0-9.]*\).*/v\1/p' "$ROOT/CHANGELOG.md" 2>/dev/null | head -1) || true
+  # CHANGELOG first: try.sh re-uses a shallow clone, where git describe can return an old tag
+  local v; v=$(sed -n 's/^## \[\{0,1\}\([0-9][0-9.]*\).*/v\1/p' "$ROOT/CHANGELOG.md" 2>/dev/null | head -1) || true
+  [ -n "$v" ] || v=$(git -C "$ROOT" describe --tags --abbrev=0 2>/dev/null) || true
   printf '%s' "$v"
 }
 header() { local v; v=$(version); printf '\n %skinops%s · %s%s\n\n' "${C_B}" "${C_0}" "$PACK" "${v:+ ${v}}"; }
