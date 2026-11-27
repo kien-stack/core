@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.4.10](https://github.com/kinopshq/core/compare/v0.4.9...v0.4.10) (2026-11-27)
+
+
+### Features
+
+* **install:** detect Gateway API CRDs already installed by the distribution ([#131](https://github.com/kinopshq/core/issues/131)) ([6c02fe2](https://github.com/kinopshq/core/commit/6c02fe2b4bcba10cc1988e5c9b78bcdc225d5589))
+
+
+### Bug fixes
+
+* **install:** clear access warnings; cloud-provider-kind without its own Gateway API ([#128](https://github.com/kinopshq/core/issues/128)) ([a86c7b8](https://github.com/kinopshq/core/commit/a86c7b8bb941c8cccc6a60b40224537a9fb1ce26))
+
 ## [0.4.9](https://github.com/kinopshq/core/compare/v0.4.8...v0.4.9) (2026-11-27)
 
 
