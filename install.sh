@@ -174,8 +174,8 @@ doctor() {
   if [ -z "$domain" ] || [ "$domain" = example.com ]; then ko "set global.domain in cluster.yaml (no domain? <node-ip>.sslip.io)"; fail=1
   elif getent hosts "argocd.$domain" >/dev/null 2>&1; then ok "DNS: argocd.$domain -> $(getent hosts "argocd.$domain" | awk '{print $1; exit}')"
   else case "$domain" in
-    *.sslip.io|*.nip.io) warn "argocd.$domain does not resolve: your DNS blocks answers with a private IP. Use another DNS (e.g. 1.1.1.1) or add the URLs to /etc/hosts" ;;
-    *) warn "argocd.$domain does not resolve yet: point *.$domain to the Traefik IP (external-dns does it if enabled)" ;;
+    *.sslip.io|*.nip.io) ;;   # hosts_hint gives the /etc/hosts line at the end
+    *) warn "argocd.$domain does not resolve (fine if external-dns will create it; otherwise create *.$domain)" ;;
   esac; fi
 
   case "$(cfg .global.tls.issuer)" in
@@ -405,22 +405,28 @@ password() {
   else printf '%s\n' "$v"; fi
 }
 
-access_hint() { # local clusters: how to reach the URLs (one hint per case)
-  local l d mac=; l=$(kubectl get nodes -o jsonpath='{.items[0].metadata.labels}{.items[0].spec.providerID}' 2>/dev/null) || true
-  d=$(cfg .global.domain)
+access_hint() { # local clusters: the tunnel to run for a LoadBalancer IP, per provider
+  local l mac=; l=$(kubectl get nodes -o jsonpath='{.items[0].metadata.labels}{.items[0].spec.providerID}' 2>/dev/null) || true
   [ "$(uname -s)" != Darwin ] && [ -z "${WINDIR:-}" ] || mac=1
   case "$l" in
-    *kind://*) warn "kind: Traefik needs a LoadBalancer IP. Run cloud-provider-kind${mac:+ with sudo} (kinops brings Gateway API, so disable its own):
-     ${mac:+sudo }cloud-provider-kind --gateway-channel disabled" ;;
-    *minikube.k8s.io*) warn "minikube: Traefik needs a LoadBalancer IP. Run in another terminal: minikube tunnel" ;;
-    *) return 0 ;;
+    *kind://*) warn "kind: run in another terminal: ${mac:+sudo }cloud-provider-kind --gateway-channel disabled" ;;
+    *minikube.k8s.io*) warn "minikube: run in another terminal: minikube tunnel" ;;
   esac
-  case "$d" in *.sslip.io|*.nip.io) ;; *) return 0 ;; esac
-  [ -z "$mac" ] || warn "macOS/Windows: the cluster IPs are not reachable from your machine. Open the URLs through a port-forward:
-     kubectl -n traefik port-forward svc/traefik 8443:443   then https://argocd.$d:8443 (add argocd.$d to /etc/hosts as 127.0.0.1)"
+  return 0
+}
+
+hosts_hint() { # the /etc/hosts line when the URLs do not resolve to Traefik
+  local d ip h hosts=""; d=$(cfg .global.domain)
+  ip=$(kubectl -n traefik get svc traefik -o jsonpath='{.status.loadBalancer.ingress[0].ip}' 2>/dev/null) || true
+  [ -n "$ip" ] || return 0
+  [ "$(getent hosts "argocd.$d" 2>/dev/null | awk '{print $1; exit}')" != "$ip" ] || return 0
+  for h in argocd $(enabled_components | grep -xE 'infisical|monitoring' | sed 's/^monitoring$/grafana/'); do hosts+=" $h.$d"; done
+  warn "add the URLs to /etc/hosts:
+     echo '$ip$hosts' | sudo tee -a /etc/hosts"
 }
 
 summary() {
+  hosts_hint
   flush_warns
   local d out; d=$(cfg .global.domain)
   rule Access
