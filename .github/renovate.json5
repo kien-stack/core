@@ -87,6 +87,7 @@
       description: 'Charts and images: deps(...) commits, listed under Dependencies and released',
       matchManagers: ['helmv3', 'helm-values'],
       semanticCommitType: 'deps',
+      semanticCommitScope: '{{parentDir}}', // deps(argocd): ..., not deps(deps): ...
     },
   ],
 }
