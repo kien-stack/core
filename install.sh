@@ -116,6 +116,18 @@ git_ls_remote() {
   fi
 }
 
+# Gateway API CRDs already installed by the distribution (k3s, RKE2, AKS, GKE...): kinops can leave them alone.
+gateway_crds_check() {
+  local m v by
+  [ "$(yq -r '."gateway-api-crd".enabled' "$CONFIG")" != false ] || return 0
+  m=$(kubectl get crd gateways.gateway.networking.k8s.io -o json 2>/dev/null) || { ok "Gateway API CRDs: installed by kinops"; return 0; }
+  case "$(yq -r '.metadata.annotations."argocd.argoproj.io/tracking-id" // ""' <<<"$m")" in traefik:*) return 0 ;; esac
+  v=$(yq -r '.metadata.annotations."gateway.networking.k8s.io/bundle-version" // "?"' <<<"$m")
+  by=$(yq -r '.metadata.annotations."meta.helm.sh/release-name" // .metadata.labels."app.kubernetes.io/managed-by" // ""' <<<"$m")
+  warn "Gateway API CRDs $v already on this cluster${by:+ ($by)}. To keep them and skip ours, add to cluster.yaml:
+     gateway-api-crd: {enabled: false}"
+}
+
 # ---------------------------------------------------------------- doctor
 doctor() {
   local fail=0 b comps; comps=$(enabled_components)
@@ -142,6 +154,7 @@ doctor() {
       if [ -n "$cni" ]; then ko "cilium is enabled but this cluster already has a CNI ($cni): remove the cilium entry in $APPSET again"; fail=1
       else ok "no CNI found: Cilium will be installed"; fi
     fi
+    gateway_crds_check
   fi
 
   local r; r=$(repo)
