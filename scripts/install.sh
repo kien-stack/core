@@ -9,7 +9,7 @@
 # KSTACK_YES=1; GIT_USERNAME/GIT_TOKEN for a private repo. Requires kubectl, helm, git.
 set -euo pipefail
 UPSTREAM=https://github.com/kinopshq/core
-DIR=${KSTACK_DIR:-$HOME/kinops}
+DIR=${KSTACK_DIR:-$PWD/kinops}   # in the current folder
 # colors: only on a TTY, honour NO_COLOR and TERM=dumb (bash 3.2 safe)
 kc() { [ -t "$1" ] && [ -z "${NO_COLOR:-}" ] && [ "${TERM:-dumb}" != dumb ]; }
 # shellcheck disable=SC2034
