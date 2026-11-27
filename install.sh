@@ -274,7 +274,6 @@ internal_dns() {
 install() {
   local comps n; comps=$(enabled_components); n=$(( $(printf '%s\n' "$comps" | grep -c .) + 1 ))
   log "Pack $PACK -> ArgoCD will deploy: $(tr '\n' ' ' <<<"$comps")"
-  access_hint
   busy Checks "cluster, Git repo..."
   doctor || die "checks failed: fix the problems above (details: ./install.sh doctor)"
   bootstrap_secrets "$comps"
@@ -316,6 +315,7 @@ YAML
   kubectl apply -f "$APP" >/dev/null
   local r; r=$(repo); r=${r#*://}; r=${r%.git}
   step GitOps "syncing from ${r} ($(rev))"
+  access_hint
 
   flush_warns
   rule Deploy
@@ -405,7 +405,7 @@ password() {
   else printf '%s\n' "$v"; fi
 }
 
-access_hint() { # local clusters (kind, minikube): the tunnel to run, shown first
+access_hint() { # local clusters (kind, minikube): the tunnel to run, before the apps deploy
   local l tun mac=; l=$(kubectl get nodes -o jsonpath='{.items[0].metadata.labels}{.items[0].spec.providerID}' 2>/dev/null) || true
   [ "$(uname -s)" != Darwin ] && [ -z "${WINDIR:-}" ] || mac=1
   case "$l" in
@@ -413,8 +413,7 @@ access_hint() { # local clusters (kind, minikube): the tunnel to run, shown firs
     *minikube.k8s.io*) tun="minikube tunnel" ;;
     *) return 0 ;;
   esac
-  clr; rule "Before you start"
-  printf ' %sIn another terminal, keep this running (gives Traefik its IP):%s\n    %s%s%s\n\n' "${C_H}" "${C_0}" "${C_B}" "$tun" "${C_0}"
+  clr; printf '\n %s→ In another terminal, keep this running (gives Traefik its IP):%s\n   %s%s%s\n' "${C_H}" "${C_0}" "${C_B}" "$tun" "${C_0}"
 }
 
 hosts_hint() { # at the end: the /etc/hosts line with the real Traefik IP, if the URLs do not resolve to it
