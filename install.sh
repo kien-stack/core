@@ -174,7 +174,7 @@ doctor() {
   if [ -z "$domain" ] || [ "$domain" = example.com ]; then ko "set global.domain in cluster.yaml (no domain? <node-ip>.sslip.io)"; fail=1
   elif getent hosts "argocd.$domain" >/dev/null 2>&1; then ok "DNS: argocd.$domain -> $(getent hosts "argocd.$domain" | awk '{print $1; exit}')"
   else case "$domain" in
-    *.sslip.io|*.nip.io) ;;   # hosts_hint gives the /etc/hosts line at the end
+    *.sslip.io|*.nip.io) ;;   # access_hint gives the /etc/hosts line first
     *) warn "argocd.$domain does not resolve (fine if external-dns will create it; otherwise create *.$domain)" ;;
   esac; fi
 
@@ -274,6 +274,7 @@ internal_dns() {
 install() {
   local comps n; comps=$(enabled_components); n=$(( $(printf '%s\n' "$comps" | grep -c .) + 1 ))
   log "Pack $PACK -> ArgoCD will deploy: $(tr '\n' ' ' <<<"$comps")"
+  access_hint
   busy Checks "cluster, Git repo..."
   doctor || die "checks failed: fix the problems above (details: ./install.sh doctor)"
   bootstrap_secrets "$comps"
@@ -316,7 +317,6 @@ YAML
   local r; r=$(repo); r=${r#*://}; r=${r%.git}
   step GitOps "syncing from ${r} ($(rev))"
 
-  access_hint
   flush_warns
   rule Deploy
   printf ' %s apps%s\n' "$n" "${C_D} (Ctrl+C is safe: ArgoCD keeps going)${C_0}"
@@ -405,28 +405,26 @@ password() {
   else printf '%s\n' "$v"; fi
 }
 
-access_hint() { # local clusters: the tunnel to run for a LoadBalancer IP, per provider
-  local l mac=; l=$(kubectl get nodes -o jsonpath='{.items[0].metadata.labels}{.items[0].spec.providerID}' 2>/dev/null) || true
+access_hint() { # local clusters (kind, minikube): the 2 commands to reach the URLs, shown first
+  local l d tun mac= hosts="" c; l=$(kubectl get nodes -o jsonpath='{.items[0].metadata.labels}{.items[0].spec.providerID}' 2>/dev/null) || true
   [ "$(uname -s)" != Darwin ] && [ -z "${WINDIR:-}" ] || mac=1
   case "$l" in
-    *kind://*) warn "kind: run in another terminal: ${mac:+sudo }cloud-provider-kind --gateway-channel disabled" ;;
-    *minikube.k8s.io*) warn "minikube: run in another terminal: minikube tunnel" ;;
+    *kind://*) tun="${mac:+sudo }cloud-provider-kind --gateway-channel disabled" ;;
+    *minikube.k8s.io*) tun="minikube tunnel" ;;
+    *) return 0 ;;
   esac
-  return 0
-}
-
-hosts_hint() { # the /etc/hosts line when the URLs do not resolve to Traefik
-  local d ip h hosts=""; d=$(cfg .global.domain)
-  ip=$(kubectl -n traefik get svc traefik -o jsonpath='{.status.loadBalancer.ingress[0].ip}' 2>/dev/null) || true
-  [ -n "$ip" ] || return 0
-  [ "$(getent hosts "argocd.$d" 2>/dev/null | awk '{print $1; exit}')" != "$ip" ] || return 0
-  for h in argocd $(enabled_components | grep -xE 'infisical|monitoring' | sed 's/^monitoring$/grafana/'); do hosts+=" $h.$d"; done
-  warn "add the URLs to /etc/hosts:
-     echo '$ip$hosts' | sudo tee -a /etc/hosts"
+  d=$(cfg .global.domain)
+  for c in argocd infisical:infisical monitoring:grafana; do
+    [ "$c" = argocd ] || grep -qx "${c%%:*}" <<<"$(enabled_components)" || continue; hosts+=" ${c#*:}.$d"; done
+  clr; rule "Before you start"
+  printf ' %sTo open the URLs on this local cluster:%s\n\n' "${C_H}" "${C_0}"
+  printf ' %s1.%s In another terminal, keep this running (gives Traefik its IP):\n    %s%s%s\n\n' "${C_H}" "${C_0}" "${C_B}" "$tun" "${C_0}"
+  case "$d" in *.sslip.io|*.nip.io) ;; *) printf '\n'; return 0 ;; esac
+  printf ' %s2.%s Once Traefik has its IP (a few minutes), add the URLs to /etc/hosts:\n' "${C_H}" "${C_0}"
+  printf "    %secho \"\$(kubectl -n traefik get svc traefik -o jsonpath='{.status.loadBalancer.ingress[0].ip}')%s\" | sudo tee -a /etc/hosts%s\n\n" "${C_B}" "$hosts" "${C_0}"
 }
 
 summary() {
-  hosts_hint
   flush_warns
   local d out; d=$(cfg .global.domain)
   rule Access
