@@ -413,7 +413,8 @@ access_hint() { # local clusters (kind, minikube): the tunnel to run, before the
     *minikube.k8s.io*) tun="minikube tunnel" ;;
     *) return 0 ;;
   esac
-  clr; printf '\n %s→ In another terminal, keep this running (gives Traefik its IP):%s\n   %s%s%s\n' "${C_H}" "${C_0}" "${C_B}" "$tun" "${C_0}"
+  clr; rule "Before you start"
+  printf ' %sIn another terminal, keep this running (gives Traefik its IP):%s\n    %s%s%s\n' "${C_H}" "${C_0}" "${C_B}" "$tun" "${C_0}"
 }
 
 hosts_hint() { # at the end: the /etc/hosts line with the real Traefik IP, if the URLs do not resolve to it
