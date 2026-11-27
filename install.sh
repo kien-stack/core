@@ -173,7 +173,10 @@ doctor() {
   local domain; domain=$(cfg .global.domain)
   if [ -z "$domain" ] || [ "$domain" = example.com ]; then ko "set global.domain in cluster.yaml (no domain? <node-ip>.sslip.io)"; fail=1
   elif getent hosts "argocd.$domain" >/dev/null 2>&1; then ok "DNS: argocd.$domain -> $(getent hosts "argocd.$domain" | awk '{print $1; exit}')"
-  else warn "argocd.$domain does not resolve (fine if external-dns will create it; otherwise create *.$domain)"; fi
+  else case "$domain" in
+    *.sslip.io|*.nip.io) warn "argocd.$domain does not resolve: your DNS blocks answers with a private IP. Use another DNS (e.g. 1.1.1.1) or add the URLs to /etc/hosts" ;;
+    *) warn "argocd.$domain does not resolve yet: point *.$domain to the Traefik IP (external-dns does it if enabled)" ;;
+  esac; fi
 
   case "$(cfg .global.tls.issuer)" in
     letsencrypt-dns01)
@@ -313,8 +316,7 @@ YAML
   local r; r=$(repo); r=${r#*://}; r=${r%.git}
   step GitOps "syncing from ${r} ($(rev))"
 
-  tunnel_hint
-  hosts_hint
+  access_hint
   flush_warns
   rule Deploy
   printf ' %s apps%s\n' "$n" "${C_D} (Ctrl+C is safe: ArgoCD keeps going)${C_0}"
@@ -403,23 +405,19 @@ password() {
   else printf '%s\n' "$v"; fi
 }
 
-hosts_hint() {
-  local d h c; d=$(cfg .global.domain)
-  case "$d" in *.sslip.io|*.nip.io) ;; *) return 0 ;; esac   # real domain: DNS does the job
-  [ "$(uname -s)" = Darwin ] || [ -n "${WINDIR:-}" ] || return 0   # Linux reaches the node IP directly
-  h="argocd.$d"
-  for c in infisical:infisical monitoring:grafana; do grep -qx "${c%%:*}" <<<"$(enabled_components)" && h="$h ${c#*:}.$d"; done
-  warn "No domain: on macOS the cluster IP is not reachable, add the URLs to /etc/hosts:
-     echo \"127.0.0.1 $h\" | sudo tee -a /etc/hosts
-   (after uninstall: sudo sed -i '' '/$d/d' /etc/hosts)"
-}
-
-tunnel_hint() {
-  local l; l=$(kubectl get nodes -o jsonpath='{.items[0].metadata.labels}{.items[0].spec.providerID}' 2>/dev/null) || true
+access_hint() { # local clusters: how to reach the URLs (one hint per case)
+  local l d mac=; l=$(kubectl get nodes -o jsonpath='{.items[0].metadata.labels}{.items[0].spec.providerID}' 2>/dev/null) || true
+  d=$(cfg .global.domain)
+  [ "$(uname -s)" != Darwin ] && [ -z "${WINDIR:-}" ] || mac=1
   case "$l" in
-    *minikube.k8s.io*) warn 'minikube: run "minikube tunnel" in another terminal, or the URLs will not answer' ;;
-    *kind://*) warn "kind: Traefik needs a LoadBalancer IP (cloud-provider-kind), or the URLs will not answer" ;;
+    *kind://*) warn "kind: Traefik needs a LoadBalancer IP. Run cloud-provider-kind${mac:+ with sudo} (kinops brings Gateway API, so disable its own):
+     ${mac:+sudo }cloud-provider-kind --gateway-channel disabled" ;;
+    *minikube.k8s.io*) warn "minikube: Traefik needs a LoadBalancer IP. Run in another terminal: minikube tunnel" ;;
+    *) return 0 ;;
   esac
+  case "$d" in *.sslip.io|*.nip.io) ;; *) return 0 ;; esac
+  [ -z "$mac" ] || warn "macOS/Windows: the cluster IPs are not reachable from your machine. Open the URLs through a port-forward:
+     kubectl -n traefik port-forward svc/traefik 8443:443   then https://argocd.$d:8443 (add argocd.$d to /etc/hosts as 127.0.0.1)"
 }
 
 summary() {
