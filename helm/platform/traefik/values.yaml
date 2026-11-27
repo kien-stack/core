@@ -1,7 +1,7 @@
 # Values of the upstream chart go under "traefik:". global.* comes from ArgoCD (domain, issuer...).
 # Apps are exposed with Gateway API: one Gateway "traefik" (extraObjects below) + one HTTPRoute per app.
 # TLS: one HTTPS listener per app in global.gatewayHosts (cluster.yaml), cert-manager creates <app>-tls.
-# Gateway API CRDs. Set false if your cluster already manages them (same or newer version).
+# Gateway API CRDs (official kubernetes-sigs release). Set false if your cluster already manages them (same or newer version).
 gateway-api-crd:
   enabled: true
 traefik:

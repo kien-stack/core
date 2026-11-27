@@ -2,14 +2,10 @@ apiVersion: v2
 name: traefik
 description: kinops traefik (wraps the upstream chart, Gateway API)
 type: application
-version: 0.2.0
+version: 0.3.0
 dependencies:
   - name: traefik
     repository: https://traefik.github.io/charts
     version: 42.2.0
-  # Gateway API CRDs, standard channel (same content as the upstream standard-install.yaml).
-  # The Traefik CRDs come with the traefik chart itself.
-  - name: gateway-api-crd
-    repository: https://k3s-io.github.io/k3s-charts
-    version: 1.7.1
-    condition: gateway-api-crd.enabled
+# Gateway API CRDs: templates/gateway-api-crds.yaml (official kubernetes-sigs release, v1.7.0).
+# The Traefik CRDs come with the traefik chart itself.

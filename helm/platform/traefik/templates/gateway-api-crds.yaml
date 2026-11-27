@@ -1,0 +1,15 @@
+{{- /* Gateway API CRDs + safe-upgrades policy (standard channel), as published by kubernetes-sigs:
+       gateway-api/standard-install.yaml, refreshed with hack/update-gateway-api.sh <version>.
+       CRDs are kept on uninstall (helm.sh/resource-policy: keep): deleting them deletes every route. */}}
+{{- if index .Values "gateway-api-crd" "enabled" }}
+{{- range $doc := regexSplit "(?m)^---\\s*$" ($.Files.Get "gateway-api/standard-install.yaml") -1 }}
+{{- $o := fromYaml $doc }}
+{{- if $o.kind }}
+{{- if eq $o.kind "CustomResourceDefinition" }}
+{{- $_ := set $o.metadata "annotations" (merge (dict "helm.sh/resource-policy" "keep") ($o.metadata.annotations | default dict)) }}
+{{- end }}
+---
+{{ toYaml $o }}
+{{- end }}
+{{- end }}
+{{- end }}
