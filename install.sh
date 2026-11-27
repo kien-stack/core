@@ -173,7 +173,10 @@ doctor() {
   local domain; domain=$(cfg .global.domain)
   if [ -z "$domain" ] || [ "$domain" = example.com ]; then ko "set global.domain in cluster.yaml (no domain? <node-ip>.sslip.io)"; fail=1
   elif getent hosts "argocd.$domain" >/dev/null 2>&1; then ok "DNS: argocd.$domain -> $(getent hosts "argocd.$domain" | awk '{print $1; exit}')"
-  else warn "argocd.$domain does not resolve (fine if external-dns will create it; otherwise create *.$domain)"; fi
+  else case "$domain" in
+    *.sslip.io|*.nip.io) ;;   # hosts_hint gives the /etc/hosts line at the end
+    *) warn "argocd.$domain does not resolve (fine if external-dns will create it; otherwise create *.$domain)" ;;
+  esac; fi
 
   case "$(cfg .global.tls.issuer)" in
     letsencrypt-dns01)
@@ -312,9 +315,8 @@ YAML
   kubectl apply -f "$APP" >/dev/null
   local r; r=$(repo); r=${r#*://}; r=${r%.git}
   step GitOps "syncing from ${r} ($(rev))"
+  access_hint
 
-  tunnel_hint
-  hosts_hint
   flush_warns
   rule Deploy
   printf ' %s apps%s\n' "$n" "${C_D} (Ctrl+C is safe: ArgoCD keeps going)${C_0}"
@@ -403,27 +405,33 @@ password() {
   else printf '%s\n' "$v"; fi
 }
 
-hosts_hint() {
-  local d h c; d=$(cfg .global.domain)
-  case "$d" in *.sslip.io|*.nip.io) ;; *) return 0 ;; esac   # real domain: DNS does the job
-  [ "$(uname -s)" = Darwin ] || [ -n "${WINDIR:-}" ] || return 0   # Linux reaches the node IP directly
-  h="argocd.$d"
-  for c in infisical:infisical monitoring:grafana; do grep -qx "${c%%:*}" <<<"$(enabled_components)" && h="$h ${c#*:}.$d"; done
-  warn "No domain: on macOS the cluster IP is not reachable, add the URLs to /etc/hosts:
-     echo \"127.0.0.1 $h\" | sudo tee -a /etc/hosts
-   (after uninstall: sudo sed -i '' '/$d/d' /etc/hosts)"
+access_hint() { # local clusters (kind, minikube): the tunnel to run, before the apps deploy
+  local l tun mac=; l=$(kubectl get nodes -o jsonpath='{.items[0].metadata.labels}{.items[0].spec.providerID}' 2>/dev/null) || true
+  [ "$(uname -s)" != Darwin ] && [ -z "${WINDIR:-}" ] || mac=1
+  case "$l" in
+    *kind://*) tun="${mac:+sudo }cloud-provider-kind --gateway-channel disabled" ;;
+    *minikube.k8s.io*) tun="minikube tunnel" ;;
+    *) return 0 ;;
+  esac
+  clr; rule "Before you start"
+  printf ' %sIn another terminal, keep this running (gives Traefik its IP):%s\n    %s%s%s\n' "${C_H}" "${C_0}" "${C_B}" "$tun" "${C_0}"
 }
 
-tunnel_hint() {
-  local l; l=$(kubectl get nodes -o jsonpath='{.items[0].metadata.labels}{.items[0].spec.providerID}' 2>/dev/null) || true
-  case "$l" in
-    *minikube.k8s.io*) warn 'minikube: run "minikube tunnel" in another terminal, or the URLs will not answer' ;;
-    *kind://*) warn "kind: Traefik needs a LoadBalancer IP (cloud-provider-kind), or the URLs will not answer" ;;
-  esac
+hosts_hint() { # at the end: the /etc/hosts line with the real Traefik IP, if the URLs do not resolve to it
+  local d ip c hosts=""; d=$(cfg .global.domain)
+  case "$d" in *.sslip.io|*.nip.io) ;; *) return 0 ;; esac
+  ip=$(kubectl -n traefik get svc traefik -o jsonpath='{.status.loadBalancer.ingress[0].ip}' 2>/dev/null) || true
+  [ -n "$ip" ] || return 0
+  [ "$(getent hosts "argocd.$d" 2>/dev/null | awk '{print $1; exit}')" != "$ip" ] || return 0
+  for c in argocd infisical:infisical monitoring:grafana; do
+    [ "$c" = argocd ] || grep -qx "${c%%:*}" <<<"$(enabled_components)" || continue; hosts+=" ${c#*:}.$d"; done
+  rule "Open the URLs"
+  printf ' %sAdd them to /etc/hosts:%s\n    %secho "%s%s" | sudo tee -a /etc/hosts%s\n' "${C_H}" "${C_0}" "${C_B}" "$ip" "$hosts" "${C_0}"
 }
 
 summary() {
   flush_warns
+  hosts_hint
   local d out; d=$(cfg .global.domain)
   rule Access
   out=$(access_box "$(enabled_components)" "$d")

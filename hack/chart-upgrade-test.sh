@@ -165,7 +165,7 @@ kind create cluster --name "$CLUSTER" --image "$NODE_IMAGE" --wait 180s >/dev/nu
 # LoadBalancer Services (traefik): the kind cloud provider, like a cloud or MetalLB would
 docker ps -q -f name=cloud-provider-kind | grep -q . ||
   docker run -d --rm --name cloud-provider-kind --network kind -v /var/run/docker.sock:/var/run/docker.sock \
-    "registry.k8s.io/cloud-provider-kind/cloud-controller-manager:$CPK_VERSION" >/dev/null
+    "registry.k8s.io/cloud-provider-kind/cloud-controller-manager:$CPK_VERSION" --gateway-channel disabled >/dev/null # Gateway API comes from kinops
 for x in $(yq -r '.spec.generators[0].list.elements[].namespace' "$appset" | sort -u); do
   kubectl create ns "$x" --dry-run=client -o yaml | kubectl apply -f - >/dev/null
 done
