@@ -1,0 +1,45 @@
+---
+# Areas
+- name: platform
+  color: "0e8a16"
+  description: helm/platform
+- name: apps
+  color: "fbca04"
+  description: helm/apps
+- name: argocd
+  color: "e05d44"
+  description: argocd/
+- name: installer
+  color: "006b75"
+  description: install.sh
+- name: docs
+  color: "0075ca"
+  description: docs/, README.md
+- name: ci
+  color: "1d3557"
+  description: .github/, hack/
+
+# Renovate
+- name: renovate
+  color: "308bea"
+  description: Dependency update
+- name: major
+  color: "b60205"
+  description: Major version bump
+- name: bootstrap
+  color: "c5def5"
+  description: Installed by install.sh before ArgoCD
+
+# Release
+- name: "autorelease: pending"
+  color: "0096c7"
+- name: "autorelease: tagged"
+  color: "2a9d8f"
+
+# Issues
+- name: bug
+  color: "d73a4a"
+- name: enhancement
+  color: "a2eeef"
+- name: question
+  color: "d876e3"
