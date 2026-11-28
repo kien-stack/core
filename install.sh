@@ -592,7 +592,7 @@ YAML
 
   local resync=""
   if kubectl -n argocd get applications -o name 2>/dev/null | grep -q .; then
-    resync=1   # re-run: wait_apps syncs what the new settings put OutOfSync
+    resync=1   # re-run: wait_apps syncs what the new settings changed
   fi
   kubectl apply -f "$APP" >/dev/null
   local r
@@ -613,20 +613,28 @@ YAML
   return $rc
 }
 
-# Re-run: the platform ApplicationSet uses RollingSync, which turns auto-sync off on its Applications and
-# only syncs a stage once the previous one is Healthy. So we sync each OutOfSync Application ourselves,
-# once per spec change (metadata.generation), unless a sync is already running.
+# Re-run: new settings change the Applications' spec, but the platform ApplicationSet (RollingSync) turns
+# auto-sync off and skips an Application that still reports Synced. So we sync, once per spec version,
+# every Application whose spec differs from its last sync. Succeeds when no sync is left to start or wait for.
 SYNCED=""
-sync_out_of_sync() {
-  local app
-  for app in $(kubectl -n argocd get applications -o jsonpath='{range .items[?(@.status.sync.status=="OutOfSync")]}{.metadata.name}@{.metadata.generation}={.status.operationState.phase}{" "}{end}' 2>/dev/null); do
-    if [[ "$app" == *=Running || " $SYNCED " == *" ${app%=*} "* ]]; then
-      continue
+resync_changed() {
+  local app pending=0
+  for app in $(kubectl -n argocd get applications -o json 2>/dev/null | yq -p json -r '.items[]
+      | select(.status.operationState.syncResult.source != null)
+      | select(.operation != null
+               or (.spec.source | to_json(0)) != (.status.operationState.syncResult.source | to_json(0)))
+      | .metadata.name + "@" + (.metadata.generation | tostring)
+        + (if .operation != null or .status.operationState.phase == "Running" then "=busy" else "" end)'); do
+    if [[ "$app" == *=busy ]]; then
+      pending=$((pending + 1))
+    elif [[ " $SYNCED " != *" $app "* ]]; then
+      kubectl -n argocd patch application "${app%@*}" --type merge \
+        -p '{"operation":{"initiatedBy":{"username":"kinops-install"},"sync":{"prune":true}}}' >/dev/null 2>&1 || true
+      SYNCED+=" $app"
+      pending=$((pending + 1))
     fi
-    kubectl -n argocd patch application "${app%@*}" --type merge \
-      -p '{"operation":{"initiatedBy":{"username":"kinops-install"},"sync":{"prune":true}}}' >/dev/null 2>&1 \
-      && SYNCED+=" ${app%=*}"
   done
+  [ "$pending" -eq 0 ]
 }
 
 wait_apps() {
@@ -643,9 +651,16 @@ wait_apps() {
   done
   local rc=0 prev_screen="" drawn_lines=0 elapsed=0 index argocd_status status screen line icon not_ready
   local -a last_status=()
+  local clean=0
   while :; do
+    # Re-run: done after 5 polls in a row with nothing to sync (app-of-apps updates the ApplicationSets,
+    # which then update their Applications)
     if [ -n "$resync" ]; then
-      sync_out_of_sync
+      if resync_changed; then
+        clean=$((clean + 1))
+      else
+        clean=0
+      fi
     fi
     # One line per Application, "<name>=<sync>/<health>" (e.g. "traefik=Synced/Healthy").
     # A leading newline lets us find "\n<name>=" for each app below, without a grep per app.
@@ -688,7 +703,7 @@ wait_apps() {
       prev_screen=$screen
       drawn_lines=$app_count
     fi
-    if [ "$not_ready" -eq 0 ]; then
+    if [ "$not_ready" -eq 0 ] && { [ -z "$resync" ] || [ "$clean" -ge 5 ]; }; then
       break
     fi
     if [ "${timeout:-0}" -gt 0 ] && [ "$elapsed" -ge "$timeout" ]; then
