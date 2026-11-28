@@ -590,6 +590,10 @@ YAML
     ok "GitOps repo credential registered in ArgoCD"
   fi
 
+  local resync=""
+  if kubectl -n argocd get applications -o name 2>/dev/null | grep -q .; then
+    resync=1   # re-run: wait_apps syncs what the new settings changed
+  fi
   kubectl apply -f "$APP" >/dev/null
   local r
   r=$(repo)
@@ -603,17 +607,41 @@ YAML
   printf ' %s apps%s\n' "$app_count" "${COLOR_DIM} (Ctrl+C is safe: ArgoCD keeps going)${COLOR_RESET}"
   trap 'clear_busy_line; printf "\n\n Stopped waiting: ArgoCD keeps deploying (kubectl -n argocd get applications)\n"; summary; exit 0' INT
   local rc=0
-  wait_apps "$comps" || rc=1
+  wait_apps "$comps" "$resync" || rc=1
   trap - INT
   summary
   return $rc
+}
+
+# Re-run: new settings change the Applications' spec, but the platform ApplicationSet (RollingSync) turns
+# auto-sync off and skips an Application that still reports Synced. So we sync, once per spec version,
+# every Application whose spec differs from its last sync. Succeeds when no sync is left to start or wait for.
+SYNCED=""
+resync_changed() {
+  local app pending=0
+  for app in $(kubectl -n argocd get applications -o json 2>/dev/null | yq -p json -r '.items[]
+      | select(.status.operationState.syncResult.source != null)
+      | select(.operation != null
+               or (.spec.source | to_json(0)) != (.status.operationState.syncResult.source | to_json(0)))
+      | .metadata.name + "@" + (.metadata.generation | tostring)
+        + (if .operation != null or .status.operationState.phase == "Running" then "=busy" else "" end)'); do
+    if [[ "$app" == *=busy ]]; then
+      pending=$((pending + 1))
+    elif [[ " $SYNCED " != *" $app "* ]]; then
+      kubectl -n argocd patch application "${app%@*}" --type merge \
+        -p '{"operation":{"initiatedBy":{"username":"kinops-install"},"sync":{"prune":true}}}' >/dev/null 2>&1 || true
+      SYNCED+=" $app"
+      pending=$((pending + 1))
+    fi
+  done
+  [ "$pending" -eq 0 ]
 }
 
 wait_apps() {
   # ArgoCD deploys every app in parallel; this shows each app's status until all are ready (no time limit by
   # default, ARGOCD_TIMEOUT=<seconds> to cap it). Ctrl+C is safe: ArgoCD keeps deploying.
   # Terminal: one line per app, redrawn in place when a status changes. CI/pipe: one line per change.
-  local comps=$1 timeout=${ARGOCD_TIMEOUT%s} app_names app app_count=0 name_width=8 start=$SECONDS
+  local comps=$1 resync=${2:-} timeout=${ARGOCD_TIMEOUT%s} app_names app app_count=0 name_width=8 start=$SECONDS
   app_names="app-of-apps $comps"
   for app in $app_names; do
     app_count=$((app_count + 1))
@@ -623,7 +651,17 @@ wait_apps() {
   done
   local rc=0 prev_screen="" drawn_lines=0 elapsed=0 index argocd_status status screen line icon not_ready
   local -a last_status=()
+  local clean=0
   while :; do
+    # Re-run: done after 5 polls in a row with nothing to sync (app-of-apps updates the ApplicationSets,
+    # which then update their Applications)
+    if [ -n "$resync" ]; then
+      if resync_changed; then
+        clean=$((clean + 1))
+      else
+        clean=0
+      fi
+    fi
     # One line per Application, "<name>=<sync>/<health>" (e.g. "traefik=Synced/Healthy").
     # A leading newline lets us find "\n<name>=" for each app below, without a grep per app.
     argocd_status=$'\n'$(kubectl -n argocd get applications \
@@ -665,7 +703,7 @@ wait_apps() {
       prev_screen=$screen
       drawn_lines=$app_count
     fi
-    if [ "$not_ready" -eq 0 ]; then
+    if [ "$not_ready" -eq 0 ] && { [ -z "$resync" ] || [ "$clean" -ge 5 ]; }; then
       break
     fi
     if [ "${timeout:-0}" -gt 0 ] && [ "$elapsed" -ge "$timeout" ]; then
@@ -760,7 +798,7 @@ access_hint() {
   if [[ ",$(allowed_ips)," == *",$docker_net,"* ]]; then
     return 0
   fi
-  if [ -n "${KSTACK_DEMO:-}" ]; then
+  if [ -n "${KSTACK_DEMO:-}" ]; then   # the demo allows it, unless KSTACK_ALLOWED_IPS replaced the list
     printf ' %sPlatform UIs answer 403 to that tunnel: run the demo again with%s\n    %sKSTACK_ALLOWED_IPS=%s%s\n' \
       "$COLOR_TITLE" "$COLOR_RESET" "$COLOR_BOLD" "$docker_net" "$COLOR_RESET"
   else

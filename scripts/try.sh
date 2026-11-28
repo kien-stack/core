@@ -85,12 +85,16 @@ fi
 # So, and ONLY in this demo, the root Application pins $REF and overrides global.domain.
 # A real install has none of this: ./install.sh writes your settings into your fork.
 D="$dom" yq -i '.global.domain = strenv(D)' cluster.yaml
-# Platform UIs (ArgoCD, Grafana, Infisical) only answer these IPs: KSTACK_ALLOWED_IPS, else this machine's public IP.
+# Platform UIs (ArgoCD, Grafana, Infisical) only answer these IPs: KSTACK_ALLOWED_IPS, else this machine's
+# public IP + the node's private network (kind/minikube: the tunnel reaches Traefik from there).
 allowed=${KSTACK_ALLOWED_IPS:-}
 if [ -z "$allowed" ]; then
   public=$(curl -fsS --max-time 5 https://api.ipify.org 2>/dev/null || true)
   if [[ "$public" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
     allowed="$public/32"
+  fi
+  if [[ "$ip" =~ ^(10\.|172\.(1[6-9]|2[0-9]|3[01])\.|192\.168\.) ]]; then
+    allowed="${allowed:+$allowed,}${ip%.*}.0/24"
   fi
 fi
 A="$allowed" yq -i '.global.platformAccess.allowedIPs = (strenv(A) | split(",") | map(sub(" "; "")) | map(select(. != "")))' cluster.yaml
