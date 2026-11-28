@@ -68,7 +68,7 @@ If your fork is private (GitLab, Gitea, private GitHub...), the installer needs 
 | I want to | Do this, then `git push` |
 |---|---|
 | Change my settings | Edit `cluster.yaml` |
-| Open ArgoCD, Grafana, Infisical from another IP | Add it to `global.platformAccess.allowedIPs` in `cluster.yaml` (others get 403). Behind Cloudflare, a tunnel or at home: [Platform access](#platform-access) |
+| Open ArgoCD, Grafana, Infisical | Add your IP to `global.platformAccess.allowedIPs` in `cluster.yaml` (closed by default, others get 403). Behind Cloudflare, a tunnel or at home: [Platform access](#platform-access) |
 | Turn a component on or off | Comment or uncomment it in `argocd/applications/platform/appset.yaml` |
 | See the deploy order | Stages and dependencies: [argocd/applications/platform/README.md](argocd/applications/platform/README.md) |
 | Deploy my app | Copy an example from `examples/` to `helm/apps/<my-app>/`: [docs/BOOTSTRAP-APP.md](docs/BOOTSTRAP-APP.md) |
@@ -83,7 +83,9 @@ Full docs: https://kinops.dev/docs
 
 ArgoCD, Grafana and Infisical only answer the IPs in `cluster.yaml`. Everyone else gets 403.
 
-The installer asks how the cluster is reached and fills it in. Your own apps in `helm/apps/` are not affected.
+Closed by default (`allowedIPs: []`). Your own apps in `helm/apps/` are not affected.
+
+The demo (`scripts/try.sh`) opens them to your IP and the node Docker network.
 
 Edit `cluster.yaml`, `git push`, done.
 
@@ -112,7 +114,7 @@ traefik:
 
 `trustedIPs`:
 
-- Cloudflare proxied DNS: https://www.cloudflare.com/ips (the installer fetches them)
+- Cloudflare proxied DNS: https://www.cloudflare.com/ips
 - Cloudflare Tunnel, cloudflared in the cluster: the pod CIDR (k3s: `10.42.0.0/16`)
 - Other load balancer: its IPs
 

@@ -14,7 +14,7 @@ global:
     - infisical
     - grafana
   # Platform UIs (ArgoCD, Grafana, Infisical): only these IPs/CIDRs get in, others get 403.
-  # Your own apps in helm/apps/ are not affected. ./install.sh puts your public IP here.
+  # Your own apps in helm/apps/ are not affected. Empty = closed: add your IP, then git push.
   # Allow everyone (not recommended): [0.0.0.0/0]
   platformAccess:
     allowedIPs: []
