@@ -3,21 +3,7 @@
 A free, open source GitOps platform for Kubernetes, installed in one command.
 Everything lives in your Git repo and ArgoCD applies it.
 
-**Included:** ArgoCD, Traefik (Gateway API), cert-manager, External Secrets + Infisical,
-CloudNativePG, SeaweedFS (S3 in your cluster), Reloader, metrics-server, OpenEBS and monitoring
-(Prometheus, Grafana, VictoriaMetrics, VictoriaLogs). Optional: Cilium, external-dns.
-
-Postgres databases (point-in-time restore) and the metrics history (daily vmbackup) are backed up to SeaweedFS.
-
-This is the platform base of every pack, monitoring and S3 included. In Community, Grafana uses a local admin (no SSO).
-
-## Packs
-
-| Pack | What you get | Status |
-|---|---|---|
-| **Community** (this repo) | Platform base: GitOps, secrets, Postgres and metrics backed up to S3, S3 in your cluster, monitoring (local Grafana admin, no SSO) | Free, open source |
-| **AI Platform** | Community + single sign-on (Authentik) + your own AI: chat over your docs (Onyx), local LLMs (Ollama), LLM gateway (LiteLLM), tracing (Langfuse), agent (OpenClaw), dev environments (Coder), MCP tools for your agents (ArgoCD, metrics, logs, Coder) | Coming soon |
-| **Enterprise** | AI Platform + resilience: HA Postgres, distributed storage, volume backups outside the cluster, disaster recovery, multi-DC. Plus AI Ops, progressive delivery, image updates, read-only cluster view | Coming soon |
+Docs: https://kinops.dev/docs
 
 ## Try it
 
@@ -63,35 +49,69 @@ If your fork is private (GitLab, Gitea, private GitHub...), the installer needs 
 > [!TIP]
 > `repository not found` on a repo that exists usually means a missing or invalid token: private repos are hidden without one.
 
-## Use it
-
-| I want to | Do this, then `git push` |
-|---|---|
-| Change my settings | Edit `cluster.yaml` |
-| Open ArgoCD, Grafana, Infisical | Add your IP to `global.platformAccess.allowedIPs` in `cluster.yaml` (closed by default, others get 403). Behind Cloudflare, a tunnel or at home: [Platform access](#platform-access) |
-| Turn a component on or off | Comment or uncomment it in `argocd/applications/platform/appset.yaml` |
-| See the deploy order | Stages and dependencies: [argocd/applications/platform/README.md](argocd/applications/platform/README.md) |
-| Deploy my app | [Deploy your app](#deploy-your-app) |
-| Understand the repo layout | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) |
-| Tune a component | Edit `helm/platform/<component>/values.yaml` |
-| Add a Grafana dashboard | ConfigMap with label `grafana_dashboard: "1"` + annotation `grafana_folder: <folder>`, or a grafana.com id in `helm/platform/monitoring/values.yaml` |
-| Back up a Postgres | Infisical's is backed up to the in-cluster S3 (SeaweedFS), 7 days, point-in-time. For your own `cnpg-cluster`: copy `plugins`, `objectStore` and `scheduledBackup` from `helm/platform/infisical/values.yaml` |
-
-Full docs: https://kinops.dev/docs
-
 ## Deploy your app
 
-Your app = a Helm chart. Two ways:
+Two ways. Pick one.
 
-**In this repo:** put your chart in `helm/apps/<my-app>/`, then `git push`.
+### 1. In this repo
 
-Examples: [`examples/`](examples/). Details: [docs/BOOTSTRAP-APP.md](docs/BOOTSTRAP-APP.md).
+One folder in `helm/apps/` = one app. Nothing else to set up.
 
-**In your own repo:**
+```bash
+cp -r examples/app-template/backend helm/apps/my-app
+$EDITOR helm/apps/my-app/values.yaml    # image, port, host
+git add helm/apps/my-app && git commit -m "feat: add my-app" && git push
+```
 
-1. Copy `argocd/applications/apps/appset.yaml` to `argocd/applications/apps/my-repo.yaml`.
-2. In the copy: change `name`, both `repoURL` and `path` to your repo, remove the `cluster.yaml` line.
-3. Add `my-repo.yaml` to `argocd/applications/apps/kustomization.yaml`, then `git push`.
+More: [docs/BOOTSTRAP-APP.md](docs/BOOTSTRAP-APP.md)
+
+### 2. From your own repo
+
+Your charts live in another repo (here `charts/<app>/`). Add an ApplicationSet that points to it.
+
+`argocd/applications/apps/my-repo.yaml`:
+
+```yaml
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: my-repo
+  namespace: argocd
+spec:
+  goTemplate: true
+  generators:
+    - git:
+        repoURL: https://github.com/me/my-apps.git
+        revision: main
+        directories:
+          - path: "charts/*"
+  template:
+    metadata:
+      name: "{{ .path.basename }}"
+    spec:
+      project: apps
+      source:
+        repoURL: https://github.com/me/my-apps.git
+        targetRevision: main
+        path: "{{ .path.path }}"
+      destination:
+        server: https://kubernetes.default.svc
+        namespace: "{{ .path.basename }}"
+      syncPolicy:
+        automated: {prune: true, selfHeal: true}
+        syncOptions: [CreateNamespace=true]
+```
+
+List it in `argocd/applications/apps/kustomization.yaml`:
+
+```yaml
+resources:
+  - app-project.yaml
+  - appset.yaml
+  - my-repo.yaml
+```
+
+`git push`. Each folder in `charts/` becomes an app.
 
 ## Platform access
 
