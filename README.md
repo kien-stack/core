@@ -51,8 +51,6 @@ If your fork is private (GitLab, Gitea, private GitHub...), the installer needs 
 
 ## Deploy your app
 
-Two ways. Pick one.
-
 ### 1. In this repo
 
 One folder in `helm/apps/` = one app. Nothing else to set up.
