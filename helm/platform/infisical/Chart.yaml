@@ -9,8 +9,8 @@ dependencies:
     version: 1.12.6
   # Postgres (CloudNativePG Cluster + Database + generated credentials), Kien's chart
   - name: cnpg-cluster
-    repository: oci://ghcr.io/dedsxc
-    version: 5.0.0
+    repository: oci://ghcr.io/kinopshq/charts
+    version: 0.1.0
   - name: valkey
     repository: https://valkey.io/valkey-helm
     version: 1.0.0
