@@ -2,6 +2,7 @@
 # kinops Community TRY: a disposable demo on your current cluster, zero questions.
 #   curl -fsSL https://raw.githubusercontent.com/kinopshq/core/main/scripts/try.sh | bash
 #   curl -fsSL https://raw.githubusercontent.com/kinopshq/core/main/scripts/try.sh | bash -s uninstall
+#     removes everything the demo created (volumes included, asks first), then ~/kinops-try
 # Uses the public repo on main (ArgoCD follows main; pin a release with KSTACK_REF=vX.Y.Z),
 # <node-ip>.sslip.io and self-signed certs. For real use: https://raw.githubusercontent.com/kinopshq/core/main/scripts/install.sh
 # Overrides: KSTACK_IP, KSTACK_REF, KSTACK_ALLOWED_IPS. Requires kubectl, helm, git (yq is fetched if missing).
@@ -61,68 +62,16 @@ cd "$DIR/src"
 APPSET=argocd/applications/platform/appset.yaml
 
 # ---------------------------------------------------------------- uninstall
-# Deterministic, does not depend on ArgoCD pruning (ArgoCD manages itself and can take itself down first).
-# Leaves CRDs and StorageClasses.
-demo_uninstall() {
-  local releases=() namespaces=() first=() d r n o
-  log "removing the platform (ArgoCD, the demo namespaces and their cluster-wide objects)"
-  # Helm releases and namespaces of the demo: the platform ApplicationSet list (minus kube-system) + helm/apps/*
-  while read -r r; do releases+=("$r"); done < <(yq -r '.spec.generators[0].list.elements[].app' "$APPSET")
-  while read -r n; do namespaces+=("$n"); done < <(yq -r '.spec.generators[0].list.elements[].namespace' "$APPSET" \
-    | grep -vx kube-system | sort -u)
-  for d in helm/apps/*/; do
-    if [ -d "$d" ]; then
-      namespaces+=("$(basename "$d")")
-      releases+=("$(basename "$d")")
-    fi
-  done
-
-  # 1. Stop ArgoCD: no controller left to re-create or prune anything, then orphan every
-  #    Application (finalizers cleared, workloads stay) and remove ArgoCD itself.
-  kubectl -n argocd scale deploy argocd-applicationset-controller --replicas=0 >/dev/null 2>&1 || true
-  kubectl -n argocd scale statefulset argocd-application-controller --replicas=0 >/dev/null 2>&1 || true
-  for o in $(kubectl -n argocd get applications,applicationsets,appprojects -o name 2>/dev/null); do
-    kubectl -n argocd patch "$o" --type merge -p '{"metadata":{"finalizers":null}}' >/dev/null 2>&1 || true
-  done
-  kubectl -n argocd delete applications,applicationsets,appprojects --all --wait=false >/dev/null 2>&1 || true
-  helm uninstall argocd -n argocd --wait >/dev/null 2>&1 || true
-
-  # 2. Cluster-wide objects of each release (webhooks left behind would break the API server for those kinds)
-  for r in "${releases[@]}"; do
-    kubectl delete validatingwebhookconfigurations,mutatingwebhookconfigurations,apiservices,clusterrolebindings,clusterroles \
-      -l app.kubernetes.io/instance="$r" --ignore-not-found >/dev/null 2>&1 || true
-  done
-
-  # 3. Namespaces: workloads first, while the operators (CloudNativePG, External Secrets, cert-manager, OpenEBS)
-  #    still run and can clear the finalizers of their own resources; then the operators.
-  local operators=(cert-manager cnpg-system external-secrets openebs)
-  for n in "${namespaces[@]}"; do
-    case " ${operators[*]} " in
-      *" $n "*) ;;
-      *) first+=("$n") ;;
-    esac
-  done
-  log "deleting namespaces: ${first[*]}"
-  kubectl delete ns "${first[@]}" --ignore-not-found --wait=true --timeout=90s 2>/dev/null || true
-  log "deleting operators: ${operators[*]}"
-  kubectl delete ns "${operators[@]}" --ignore-not-found --wait=true --timeout=90s 2>/dev/null || true
-
-  # 4. Anything still stuck on a finalizer (its operator is already gone): clear it, then delete again
-  for n in "${namespaces[@]}"; do
-    kubectl get ns "$n" >/dev/null 2>&1 || continue
-    for r in $(kubectl api-resources --namespaced --verbs=list -o name 2>/dev/null); do
-      for o in $(kubectl -n "$n" get "$r" -o name 2>/dev/null); do
-        kubectl -n "$n" patch "$o" --type merge -p '{"metadata":{"finalizers":null}}' >/dev/null 2>&1 || true
-      done
-    done
-  done
-  kubectl delete ns "${namespaces[@]}" --ignore-not-found --wait=true --timeout=2m >/dev/null 2>&1 \
-    || log "some namespaces are still terminating: kubectl get ns"
-  log "done (CRDs and StorageClasses are kept)"
-}
-
+# install.sh uninstall removes everything the platform created (it asks first), then the demo files go too.
 if [ "${1:-}" = uninstall ]; then
-  demo_uninstall
+  log "uninstall: the platform, then $DIR (the demo files)"
+  bash install.sh uninstall
+  case "$DIR" in
+    ""|/|"$HOME"|"$HOME/") die "refusing to delete $DIR" ;;
+  esac
+  cd /
+  rm -rf -- "$DIR"
+  log "deleted $DIR"
   exit 0
 fi
 

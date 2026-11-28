@@ -2,6 +2,7 @@
 # kinops Community INSTALL: the real, free install on your cluster.
 #   curl -fsSL https://raw.githubusercontent.com/kinopshq/core/main/scripts/install.sh | bash
 #   curl -fsSL https://raw.githubusercontent.com/kinopshq/core/main/scripts/install.sh | bash -s uninstall
+#     removes everything the platform created (volumes included, asks first), then $KSTACK_DIR (~/kinops, your clone)
 # Before: fork https://github.com/kinopshq/core (you need push access to your fork).
 # Clones YOUR fork, then runs its ./install.sh (questions on first run, commit + push, install).
 # Same as: git clone <your fork> && cd <it> && ./install.sh
@@ -74,12 +75,38 @@ kubectl version --request-timeout=10s >/dev/null 2>&1 || die "no reachable clust
 
 SRC="$DIR/repo"
 if [ "${1:-}" = uninstall ]; then
-  # uninstall only needs the script: your clone if any, else ours
+  # The platform first (your clone's install.sh if any, else ours; it asks first), then $DIR
+  tmp=""
   if [ ! -f "$SRC/install.sh" ]; then
-    SRC=$(mktemp -d)
-    git clone -q --depth 1 "${KSTACK_SOURCE:-$UPSTREAM}" "$SRC"
+    tmp=$(mktemp -d)
+    git clone -q --depth 1 "${KSTACK_SOURCE:-$UPSTREAM}" "$tmp"
+    SRC=$tmp
   fi
-  exec bash "$SRC/install.sh" "$@"
+  bash "$SRC/install.sh" uninstall
+  if [ -n "$tmp" ]; then
+    rm -rf -- "$tmp"
+  fi
+  [ -d "$DIR" ] || exit 0
+  case "$DIR" in
+    ""|/|"$HOME"|"$HOME/") die "refusing to delete $DIR" ;;
+  esac
+  # Your clone: do not lose work that is not in your fork yet
+  changes=""
+  if [ -d "$DIR/repo/.git" ]; then
+    changes=$(git -C "$DIR/repo" status --porcelain; git -C "$DIR/repo" log --oneline --branches --not --remotes)
+  fi
+  if [ -n "$changes" ]; then
+    log "$DIR/repo has changes that are not in your fork:"
+    printf '%s\n' "$changes" | sed 's/^/    /'
+    case "$(ask "${KSTACK_YES:+yes}" "Delete $DIR anyway? yes/no" no)" in
+      y|Y|yes) ;;
+      *) log "kept $DIR"; exit 0 ;;
+    esac
+  fi
+  cd /
+  rm -rf -- "$DIR"
+  log "deleted $DIR"
+  exit 0
 fi
 
 # ---------------------------------------------------------------- your fork
