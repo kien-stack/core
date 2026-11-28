@@ -793,12 +793,15 @@ summary() {
   printf '%s\n' "$out" >"$ROOT/kstack-access.txt"
   printf '%s\n' "$out" | sed -E "s/^ ([A-Za-z]+)/ ${COLOR_BOLD}\1${COLOR_RESET}/"   # titles in bold
   printf '\n %sSaved to %s (no passwords)%s\n' "$COLOR_DIM" "$ROOT/kstack-access.txt" "$COLOR_RESET"
+  rule "Platform access"
   if [ -z "$(allowed_ips)" ]; then
-    printf ' %sPlatform UIs (ArgoCD, Grafana, Infisical) are closed:%s add your IP to global.platformAccess.allowedIPs in cluster.yaml, then git push.\n' "$COLOR_WARN" "$COLOR_RESET"
-    echo " Behind Cloudflare or a load balancer: also traefik.ports.websecure.forwardedHeaders.trustedIPs. See README > Platform access."
-    echo " Meanwhile: kubectl -n argocd port-forward svc/argocd-server 8080:443"
+    printf ' %s! ArgoCD, Grafana and Infisical are closed%s (403 for everyone)\n\n' "$COLOR_WARN" "$COLOR_RESET"
+    printf ' Open them to your IP in %scluster.yaml%s, then git push:\n' "$COLOR_BOLD" "$COLOR_RESET"
+    printf '   %sglobal:\n     platformAccess:\n       allowedIPs: [<your-ip>/32]%s\n\n' "$COLOR_DIM" "$COLOR_RESET"
+    printf ' Behind Cloudflare or a load balancer: README > Platform access\n\n'
+    printf ' Meanwhile:\n   kubectl -n argocd port-forward svc/argocd-server 8080:443\n\n'
   else
-    printf ' Platform UIs only answer: %s (global.platformAccess.allowedIPs)\n' "$(allowed_ips)"
+    printf ' ArgoCD, Grafana and Infisical only answer: %s\n\n' "$(allowed_ips)"
   fi
   if [ -z "${KSTACK_DEMO:-}" ]; then
     echo " To change anything: edit cluster.yaml or helm/, then git push"
