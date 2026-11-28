@@ -85,7 +85,7 @@ spec:
     - {namespace: "*", server: https://kubernetes.default.svc}
 ```
 
-`appset.yaml` (one app per folder in `charts/` of your repo):
+`appset.yaml` (one element = one app):
 
 ```yaml
 apiVersion: argoproj.io/v1alpha1
@@ -96,23 +96,24 @@ metadata:
 spec:
   goTemplate: true
   generators:
-    - git:
-        repoURL: https://github.com/me/my-app.git
-        revision: main
-        directories:
-          - path: "charts/*"
+    - list:
+        elements:
+          - name: my-app
+            repoURL: https://github.com/me/my-app.git
+            namespace: my-app
+            path: chart
   template:
     metadata:
-      name: "{{ .path.basename }}"
+      name: "{{ .name }}"
     spec:
       project: my-app
       source:
-        repoURL: https://github.com/me/my-app.git
+        repoURL: "{{ .repoURL }}"
         targetRevision: main
-        path: "{{ .path.path }}"
+        path: "{{ .path }}"
       destination:
         server: https://kubernetes.default.svc
-        namespace: "{{ .path.basename }}"
+        namespace: "{{ .namespace }}"
       syncPolicy:
         automated: {prune: true, selfHeal: true}
         syncOptions: [CreateNamespace=true]
