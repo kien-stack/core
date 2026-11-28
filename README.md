@@ -81,66 +81,35 @@ Full docs: https://kinops.dev/docs
 
 ## Platform access
 
-ArgoCD, Grafana and Infisical only answer the IPs in `cluster.yaml`. Everyone else gets 403.
+ArgoCD, Grafana and Infisical are closed by default (403).
 
-Closed by default (`allowedIPs: []`). Your own apps in `helm/apps/` are not affected.
-
-The demo (`scripts/try.sh`) opens them to your IP and the node Docker network.
-
-Edit `cluster.yaml`, `git push`, done.
-
-### Public IP (VPS, bare metal)
+Open them to your IP in `cluster.yaml`, then `git push`:
 
 ```yaml
 global:
   platformAccess:
-    allowedIPs: [203.0.113.7/32]    # your public IP
+    allowedIPs: [203.0.113.7/32]
 ```
 
-### Behind Cloudflare or a load balancer
-
-Traefik must trust the proxy to read your real IP from `X-Forwarded-For`.
+Behind Cloudflare or a load balancer, also add the proxy IPs:
 
 ```yaml
-global:
-  platformAccess:
-    allowedIPs: [203.0.113.7/32]    # your public IP
 traefik:
   ports:
     websecure:
       forwardedHeaders:
-        trustedIPs: [173.245.48.0/20, ...]    # the proxy
+        trustedIPs: [173.245.48.0/20, ...]
 ```
 
-`trustedIPs`:
+- Cloudflare DNS: https://www.cloudflare.com/ips
+- Cloudflare Tunnel: the pod CIDR (k3s: `10.42.0.0/16`)
+- Load balancer: its IPs
 
-- Cloudflare proxied DNS: https://www.cloudflare.com/ips
-- Cloudflare Tunnel, cloudflared in the cluster: the pod CIDR (k3s: `10.42.0.0/16`)
-- Other load balancer: its IPs
-
-### At home
-
-```yaml
-global:
-  platformAccess:
-    allowedIPs:
-      - 192.168.1.0/24    # your LAN
-      - 203.0.113.7/32    # your public IP (port forwarding)
-```
-
-From outside: a VPN, or a Cloudflare Tunnel (above).
-
-kind / minikube: add the Docker network of the node (e.g. `172.18.0.0/24`).
-
-### Still 403?
-
-See the IP Traefik refused (first field of each line):
+Still 403? The refused IP is the first field:
 
 ```bash
 kubectl -n traefik logs deploy/traefik | grep '" 403 '
 ```
-
-Locked out? `kubectl -n argocd port-forward svc/argocd-server 8080:443` still works (https://localhost:8080).
 
 ## Uninstall
 
