@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.5.0](https://github.com/kinopshq/core/compare/v0.4.10...v0.5.0) (2026-11-28)
+
+
+### ⚠ BREAKING CHANGES
+
+* an existing fork that pulls this without setting global.platformAccess.allowedIPs gets 403 on ArgoCD, Grafana and Infisical. Add your IP (or [0.0.0.0/0] to keep them open) to cluster.yaml before updating.
+
+### Features
+
+* platform UIs only answer global.platformAccess.allowedIPs (Traefik ipAllowList) ([#134](https://github.com/kinopshq/core/issues/134)) ([0a85610](https://github.com/kinopshq/core/commit/0a85610a398c13f761cddb1d217a29181e112fff))
+
 ## [0.4.10](https://github.com/kinopshq/core/compare/v0.4.9...v0.4.10) (2026-11-27)
 
 
