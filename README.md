@@ -51,10 +51,6 @@ If your fork is private (GitLab, Gitea, private GitHub...), the installer needs 
 
 ## Deploy your app
 
-Two ways. Pick one.
-
-### 1. In this repo
-
 One folder in `helm/apps/` = one app. Nothing else to set up.
 
 ```bash
@@ -64,54 +60,6 @@ git add helm/apps/my-app && git commit -m "feat: add my-app" && git push
 ```
 
 More: [docs/BOOTSTRAP-APP.md](docs/BOOTSTRAP-APP.md)
-
-### 2. From your own repo
-
-Your charts live in another repo (here `charts/<app>/`). Add an ApplicationSet that points to it.
-
-`argocd/applications/apps/my-repo.yaml`:
-
-```yaml
-apiVersion: argoproj.io/v1alpha1
-kind: ApplicationSet
-metadata:
-  name: my-repo
-  namespace: argocd
-spec:
-  goTemplate: true
-  generators:
-    - git:
-        repoURL: https://github.com/me/my-apps.git
-        revision: main
-        directories:
-          - path: "charts/*"
-  template:
-    metadata:
-      name: "{{ .path.basename }}"
-    spec:
-      project: apps
-      source:
-        repoURL: https://github.com/me/my-apps.git
-        targetRevision: main
-        path: "{{ .path.path }}"
-      destination:
-        server: https://kubernetes.default.svc
-        namespace: "{{ .path.basename }}"
-      syncPolicy:
-        automated: {prune: true, selfHeal: true}
-        syncOptions: [CreateNamespace=true]
-```
-
-List it in `argocd/applications/apps/kustomization.yaml`:
-
-```yaml
-resources:
-  - app-project.yaml
-  - appset.yaml
-  - my-repo.yaml
-```
-
-`git push`. Each folder in `charts/` becomes an app.
 
 ## Platform access
 
