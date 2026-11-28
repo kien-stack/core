@@ -950,7 +950,7 @@ delete_objects() {
   done
 }
 uninstall() {
-  local releases=() namespaces=() existing=() first=() d r n o comps pvcs answer corefile
+  local releases=() namespaces=() existing=() first=() d r n o comps answer corefile
   local operators=(cert-manager cnpg-system external-secrets openebs)
   kubectl version --request-timeout=10s >/dev/null 2>&1 || die "no reachable cluster in the current kubectl context"
   # Components and their namespaces: the platform ApplicationSet list + helm/apps/*
@@ -971,16 +971,20 @@ uninstall() {
       existing+=("$n")
     fi
   done
-  pvcs=$(for n in ${existing[@]+"${existing[@]}"}; do
-    kubectl -n "$n" get pvc --no-headers 2>/dev/null \
-      -o custom-columns='NS:.metadata.namespace,NAME:.metadata.name,SIZE:.spec.resources.requests.storage' \
-      | while read -r o; do printf '      %s\n' "$o"; done
-  done)
   log "This deletes, on $(kubectl config current-context):"
-  printf '    ArgoCD, its Applications and the cluster-wide objects of the components\n'
-  printf '    namespaces: %s\n' "${existing[*]:-none}"
-  printf '    volumes (PVCs, their data is lost):\n%s\n' "${pvcs:-      none}"
-  printf '    kept: CRDs, Cilium\n'
+  # One row per namespace: its pods and its volumes (PVCs: their data is lost)
+  printf '    %s%-22s %6s %6s %10s%s\n' "$COLOR_BOLD" NAMESPACE PODS PVCS STORAGE "$COLOR_RESET"
+  for n in ${existing[@]+"${existing[@]}"}; do
+    printf '    %-22s %6s %s\n' "$n" "$(kubectl -n "$n" get pods --no-headers 2>/dev/null | grep -c .)" \
+      "$(kubectl -n "$n" get pvc --no-headers -o custom-columns=S:.spec.resources.requests.storage 2>/dev/null \
+        | awk '{v=$1+0; if ($1 ~ /Mi$/) v/=1024; if ($1 ~ /Ti$/) v*=1024; n++; t+=v}
+               END {if (n) printf "%6d %8.1fGi", n, t; else printf "%6d %10s", 0, "-"}')"
+  done
+  if [ ${#existing[@]} -eq 0 ]; then
+    printf '    %-22s\n' none
+  fi
+  printf '    + ArgoCD, its Applications and the cluster-wide objects of the components\n'
+  printf '    %skept: CRDs, Cilium%s\n' "$COLOR_DIM" "$COLOR_RESET"
   answer=$(ask "${KSTACK_YES:+yes}" "Delete all of this? yes/no" no)
   case "$answer" in
     y|Y|yes) ;;
