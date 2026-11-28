@@ -103,11 +103,11 @@ spec:
           - name: api
             repoURL: https://github.com/me/api.git
             namespace: shop
-            path: argocd/stg    # folder of the Helm chart in the repo
+            path: deploy/helm    # folder of the Helm chart in the repo
           - name: web
             repoURL: https://github.com/me/web.git
             namespace: shop
-            path: argocd/stg    # folder of the Helm chart in the repo
+            path: deploy/helm    # folder of the Helm chart in the repo
   template:
     metadata:
       name: "{{ .name }}"
