@@ -336,13 +336,13 @@ doctor() {
   local r
   r=$(repo)
   if [ -z "${KSTACK_DEMO:-}" ] && is_public_repo "$r"; then
-    warn "argocd/app-of-apps.yaml still points to our public repo: put your fork's URL there (and in argocd/applications/*/appset.yaml)"
+    warn "$APP still points to our public repo: put your fork's URL there (and in $ROOT/argocd/applications/*/appset.yaml)"
   fi
   if grep -rq "repoURL: $r" "$ROOT"/argocd/applications/*/appset.yaml \
      && [ "$(grep -rh 'repoURL:' "$ROOT"/argocd/applications/*/appset.yaml | sort -u | wc -l)" -eq 1 ]; then
     ok "ApplicationSets follow the same repo as app-of-apps"
   else
-    ko "argocd/applications/*/appset.yaml must use the same repoURL as argocd/app-of-apps.yaml ($r)"
+    ko "$ROOT/argocd/applications/*/appset.yaml must use the same repoURL as $APP ($r)"
     fail=1
   fi
   if git_ls_remote "$r" >/dev/null 2>&1; then
@@ -358,7 +358,7 @@ doctor() {
     ok "demo mode: local settings, ArgoCD follows the public release"
   elif git -C "$ROOT" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
     if [ -n "$(git -C "$ROOT" status --porcelain -- cluster.yaml argocd helm 2>/dev/null)" ]; then
-      ko "uncommitted changes in cluster.yaml / argocd/ / helm/: ArgoCD only sees Git. Commit and push them: git -C $ROOT commit -am 'my settings' && git -C $ROOT push"
+      ko "uncommitted changes in $ROOT (cluster.yaml, argocd/, helm/): ArgoCD only sees Git. Commit and push them: git -C $ROOT commit -am 'my settings' && git -C $ROOT push"
       fail=1
     else
       local remote_sha head_sha
@@ -380,7 +380,7 @@ doctor() {
   local domain
   domain=$(cfg .global.domain)
   if [ -z "$domain" ] || [ "$domain" = example.com ]; then
-    ko "set global.domain in cluster.yaml (no domain? <node-ip>.sslip.io)"
+    ko "set global.domain in $CONFIG (no domain? <node-ip>.sslip.io)"
     fail=1
   elif getent hosts "argocd.$domain" >/dev/null 2>&1; then
     ok "DNS: argocd.$domain -> $(getent hosts "argocd.$domain" | awk '{print $1; exit}')"
@@ -417,7 +417,7 @@ doctor() {
   local allowed
   allowed=$(allowed_ips)
   if [ -z "$allowed" ]; then
-    warn "platform UIs (ArgoCD, Grafana, Infisical) are closed: add your IP to global.platformAccess.allowedIPs in cluster.yaml, then git push"
+    warn "platform UIs (ArgoCD, Grafana, Infisical) are closed: add your IP to global.platformAccess.allowedIPs in $CONFIG, then git push"
   elif [[ ",$allowed," == *",0.0.0.0/0,"* ]]; then
     warn "platform UIs open to the whole Internet (global.platformAccess.allowedIPs: 0.0.0.0/0)"
   else
@@ -793,8 +793,8 @@ access_hint() {
     printf ' %sPlatform UIs answer 403 to that tunnel: run the demo again with%s\n    %sKSTACK_ALLOWED_IPS=%s%s\n' \
       "$COLOR_TITLE" "$COLOR_RESET" "$COLOR_BOLD" "$docker_net" "$COLOR_RESET"
   else
-    printf ' %sPlatform UIs answer 403 to that tunnel: add it to global.platformAccess.allowedIPs (cluster.yaml)%s\n    %s%s%s\n' \
-      "$COLOR_TITLE" "$COLOR_RESET" "$COLOR_BOLD" "$docker_net" "$COLOR_RESET"
+    printf ' %sPlatform UIs answer 403 to that tunnel: add it to global.platformAccess.allowedIPs (%s)%s\n    %s%s%s\n' \
+      "$COLOR_TITLE" "$CONFIG" "$COLOR_RESET" "$COLOR_BOLD" "$docker_net" "$COLOR_RESET"
   fi
 }
 
@@ -840,14 +840,14 @@ summary() {
       ArgoCD https://localhost:8080 "kubectl -n argocd port-forward svc/argocd-server 8080:443" \
       Grafana http://localhost:8081 "kubectl -n monitoring port-forward svc/monitoring-grafana 8081:80" \
       Infisical http://localhost:8082 "kubectl -n infisical port-forward svc/infisical-infisical-standalone-infisical 8082:8080"
-    printf '\n Open them to your IP in %scluster.yaml%s, then git push:\n' "$COLOR_BOLD" "$COLOR_RESET"
+    printf '\n Open them to your IP in %s%s%s, then git push:\n' "$COLOR_BOLD" "$CONFIG" "$COLOR_RESET"
     printf '   %sglobal:\n     platformAccess:\n       allowedIPs: [<your-ip>/32]%s\n\n' "$COLOR_DIM" "$COLOR_RESET"
     printf ' Behind Cloudflare or a load balancer: README > Platform access\n\n'
   else
     printf ' ArgoCD, Grafana and Infisical only answer: %s\n\n' "$(allowed_ips)"
   fi
   if [ -z "${KSTACK_DEMO:-}" ]; then
-    echo " To change anything: edit cluster.yaml or helm/, then git push"
+    echo " To change anything: edit $CONFIG or $ROOT/helm/, then git push"
   fi
   return 0
 }
