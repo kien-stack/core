@@ -268,7 +268,7 @@ gateway_crds_check() {
   version=$(yq -r '.metadata.annotations."gateway.networking.k8s.io/bundle-version" // "?"' <<<"$crd")
   owner=$(yq -r '.metadata.annotations."meta.helm.sh/release-name"
     // .metadata.labels."app.kubernetes.io/managed-by" // ""' <<<"$crd")
-  warn "Gateway API CRDs $version already on this cluster${owner:+ ($owner)}. To keep them and skip ours, add to cluster.yaml:
+  warn "Gateway API CRDs $version already on this cluster${owner:+ ($owner)}. To keep them and skip ours, add to $CONFIG:
      gateway-api-crd: {enabled: false}"
 }
 
