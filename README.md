@@ -81,69 +81,17 @@ Full docs: https://kinops.dev/docs
 
 ## Deploy your app
 
-Two ways. Pick one.
+Your app = a Helm chart. Two ways:
 
-### 1. In this repo
+**In this repo:** put your chart in `helm/apps/<my-app>/`, then `git push`.
 
-One folder in `helm/apps/` = one app. Nothing else to set up.
+Examples: [`examples/`](examples/). Details: [docs/BOOTSTRAP-APP.md](docs/BOOTSTRAP-APP.md).
 
-```bash
-cp -r examples/app-template/backend helm/apps/my-app
-$EDITOR helm/apps/my-app/values.yaml    # image, port, host
-git add helm/apps/my-app && git commit -m "feat: add my-app" && git push
-```
+**In your own repo:**
 
-More: [docs/BOOTSTRAP-APP.md](docs/BOOTSTRAP-APP.md)
-
-### 2. From your own repo
-
-Your charts live in another repo (here `charts/<app>/`). Add an ApplicationSet that points to it.
-
-`argocd/applications/apps/my-repo.yaml`:
-
-```yaml
-apiVersion: argoproj.io/v1alpha1
-kind: ApplicationSet
-metadata:
-  name: my-repo
-  namespace: argocd
-spec:
-  goTemplate: true
-  generators:
-    - git:
-        repoURL: https://github.com/me/my-apps.git
-        revision: main
-        directories:
-          - path: "charts/*"
-  template:
-    metadata:
-      name: "{{ .path.basename }}"
-    spec:
-      project: apps
-      source:
-        repoURL: https://github.com/me/my-apps.git
-        targetRevision: main
-        path: "{{ .path.path }}"
-      destination:
-        server: https://kubernetes.default.svc
-        namespace: "{{ .path.basename }}"
-      syncPolicy:
-        automated: {prune: true, selfHeal: true}
-        syncOptions: [CreateNamespace=true]
-```
-
-List it in `argocd/applications/apps/kustomization.yaml`:
-
-```yaml
-resources:
-  - app-project.yaml
-  - appset.yaml
-  - my-repo.yaml
-```
-
-`git push`. Each folder in `charts/` becomes an app.
-
-Private repo: add its credentials in ArgoCD (Settings > Repositories).
+1. Copy `argocd/applications/apps/appset.yaml` to `argocd/applications/apps/my-repo.yaml`.
+2. In the copy: change `name`, both `repoURL` and `path` to your repo, remove the `cluster.yaml` line.
+3. Add `my-repo.yaml` to `argocd/applications/apps/kustomization.yaml`, then `git push`.
 
 ## Platform access
 
