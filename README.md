@@ -110,7 +110,11 @@ Locked out? `kubectl -n argocd port-forward svc/argocd-server 8080:443` still wo
 curl -fsSL https://raw.githubusercontent.com/kinopshq/core/main/scripts/install.sh | bash -s uninstall
 ```
 
-Removes the ArgoCD apps, then ArgoCD. Namespaces and volumes are kept; delete them with `kubectl delete ns ...` if you want.
+Removes everything the platform created: ArgoCD, the components, their namespaces and volumes (data lost), then `~/kinops` (your clone).
+
+It lists what goes away and asks first (`KSTACK_YES=1`: no question). Changes not pushed to your fork: asked again.
+
+Kept: CRDs.
 
 ## License
 

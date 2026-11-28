@@ -4,7 +4,7 @@
 #   ./install.sh             configure if needed, then install (default)
 #   ./install.sh configure   ask the questions again, commit, push, install
 #   ./install.sh doctor      check the cluster and the repo
-#   ./install.sh uninstall   ArgoCD apps, then ArgoCD (keeps namespaces/PVCs)
+#   ./install.sh uninstall   remove everything the platform created, volumes included (asks first; keeps CRDs)
 #   ./install.sh password argocd|infisical|grafana   print a login (once its app is deployed)
 # KSTACK_VERBOSE=1 shows every step in detail.
 # Everything it uses is in Git, nothing is generated:
@@ -971,29 +971,127 @@ setup() {
 }
 
 # ---------------------------------------------------------------- uninstall
-# Order matters: ArgoCD manages itself, so stop the self-management first or it deletes its own
-# controller and the remaining Applications hang on their finalizers.
-# clear_finalizers APP: let ArgoCD delete the Application without waiting for its resources
-clear_finalizers() {
-  kubectl -n argocd patch application "$1" --type merge -p '{"metadata":{"finalizers":null}}' >/dev/null 2>&1 || true
+# Removes everything the platform created, deterministically (does not depend on ArgoCD pruning:
+# ArgoCD manages itself and can take itself down first). Asks first: the data in the volumes is lost.
+# Kept: CRDs (deleting one deletes its objects in the whole cluster) and Cilium (the cluster's CNI).
+# delete_objects "<components>" NAMESPACE RESOURCE...: objects of these components (NAMESPACE empty = cluster-wide),
+# found by their ArgoCD tracking annotation or their Helm instance label
+delete_objects() {
+  local comps=$1 ns=$2 r o app inst
+  shift 2
+  for r in "$@"; do
+    while IFS='|' read -r o app inst; do
+      if component_enabled "${app%%:*}" "$comps" || component_enabled "$inst" "$comps"; then
+        kubectl ${ns:+-n "$ns"} delete "$r" "$o" --ignore-not-found --wait=false >/dev/null 2>&1 || true
+      fi
+    done < <(kubectl ${ns:+-n "$ns"} get "$r" -o jsonpath='{range .items[*]}{.metadata.name}|{.metadata.annotations.argocd\.argoproj\.io/tracking-id}|{.metadata.labels.app\.kubernetes\.io/instance}{"\n"}{end}' 2>/dev/null)
+  done
 }
 uninstall() {
-  local app
-  log "Removing the platform (ArgoCD apps, then ArgoCD); namespaces, CRDs and PVCs are kept"
-  clear_finalizers app-of-apps
-  kubectl -n argocd delete application app-of-apps --ignore-not-found --wait=false >/dev/null 2>&1 || true
-  kubectl -n argocd delete applicationsets --all --cascade=orphan >/dev/null 2>&1 || true
-  clear_finalizers argocd
-  kubectl -n argocd delete application argocd --ignore-not-found >/dev/null 2>&1 || true
-  if ! kubectl -n argocd delete applications --all --wait=true --timeout=5m; then
-    warn "some apps did not finish pruning: forcing"
-    for app in $(kubectl -n argocd get applications -o name 2>/dev/null); do
-      clear_finalizers "${app#*/}"
-    done
+  local releases=() namespaces=() existing=() first=() d r n o comps answer corefile
+  local operators=(cert-manager cnpg-system external-secrets openebs)
+  kubectl version --request-timeout=10s >/dev/null 2>&1 || die "no reachable cluster in the current kubectl context"
+  # Components and their namespaces: the platform ApplicationSet list + helm/apps/*
+  while read -r r; do releases+=("$r"); done < <(yq -r '.spec.generators[0].list.elements[].app' "$APPSET" | grep -vx cilium)
+  while read -r n; do namespaces+=("$n"); done < <(yq -r '.spec.generators[0].list.elements[].namespace' "$APPSET" \
+    | grep -vx kube-system | sort -u)
+  for d in "$ROOT"/helm/apps/*/; do
+    if [ -d "$d" ]; then
+      namespaces+=("$(basename "$d")")
+      releases+=("$(basename "$d")")
+    fi
+  done
+  comps=$(printf '%s\n' "${releases[@]}")
+
+  # 0. Show what goes away, then ask (KSTACK_YES=1: no question)
+  for n in "${namespaces[@]}"; do
+    if kubectl get ns "$n" >/dev/null 2>&1; then
+      existing+=("$n")
+    fi
+  done
+  log "This deletes, on $(kubectl config current-context):"
+  # One row per namespace: its pods and its volumes (PVCs: their data is lost)
+  printf '    %s%-22s %6s %6s %10s%s\n' "$COLOR_BOLD" NAMESPACE PODS PVCS STORAGE "$COLOR_RESET"
+  for n in ${existing[@]+"${existing[@]}"}; do
+    printf '    %-22s %6s %s\n' "$n" "$(kubectl -n "$n" get pods --no-headers 2>/dev/null | grep -c .)" \
+      "$(kubectl -n "$n" get pvc --no-headers -o custom-columns=S:.spec.resources.requests.storage 2>/dev/null \
+        | awk '{v=$1+0; if ($1 ~ /Mi$/) v/=1024; if ($1 ~ /Ti$/) v*=1024; n++; t+=v}
+               END {if (n) printf "%6d %8.1fGi", n, t; else printf "%6d %10s", 0, "-"}')"
+  done
+  if [ ${#existing[@]} -eq 0 ]; then
+    printf '    %-22s\n' none
   fi
-  kubectl -n argocd delete appprojects platform apps --ignore-not-found >/dev/null 2>&1 || true
-  helm uninstall argocd -n argocd --wait 2>/dev/null || true
-  ok "done (delete namespaces/PVCs with kubectl if you want)"
+  printf '    + ArgoCD, its Applications and the cluster-wide objects of the components\n'
+  printf '    %skept: CRDs, Cilium%s\n' "$COLOR_DIM" "$COLOR_RESET"
+  answer=$(ask "${KSTACK_YES:+yes}" "Delete all of this? yes/no" no)
+  case "$answer" in
+    y|Y|yes) ;;
+    *) die "nothing removed" ;;
+  esac
+
+  # 1. Stop ArgoCD: no controller left to re-create or prune anything, then orphan every
+  #    Application (finalizers cleared, workloads stay) and remove ArgoCD itself.
+  log "removing ArgoCD"
+  kubectl -n argocd scale deploy argocd-applicationset-controller --replicas=0 >/dev/null 2>&1 || true
+  kubectl -n argocd scale statefulset argocd-application-controller --replicas=0 >/dev/null 2>&1 || true
+  for o in $(kubectl -n argocd get applications,applicationsets,appprojects -o name 2>/dev/null); do
+    kubectl -n argocd patch "$o" --type merge -p '{"metadata":{"finalizers":null}}' >/dev/null 2>&1 || true
+  done
+  kubectl -n argocd delete applications,applicationsets,appprojects --all --wait=false >/dev/null 2>&1 || true
+  helm uninstall argocd -n argocd --wait >/dev/null 2>&1 || true
+
+  # 2. Webhooks and API services first: left without their pods they break the API server for those kinds
+  #    (and the namespace deletion below). Then what the components put in kube-system (metrics-server...).
+  delete_objects "$comps" "" validatingwebhookconfigurations mutatingwebhookconfigurations apiservices
+  delete_objects "$comps" kube-system deploy ds sts svc sa cm secret role rolebinding pdb servicemonitors
+
+  # 3. Namespaces (and their PVCs): workloads first, while the operators (CloudNativePG, External Secrets,
+  #    cert-manager, OpenEBS) still run and can clear the finalizers of their own resources; then the operators.
+  for n in "${namespaces[@]}"; do
+    case " ${operators[*]} " in
+      *" $n "*) ;;
+      *) first+=("$n") ;;
+    esac
+  done
+  log "deleting namespaces: ${first[*]}"
+  kubectl delete ns "${first[@]}" --ignore-not-found --wait=true --timeout=90s >/dev/null 2>&1 || true
+  log "deleting operators: ${operators[*]}"
+  kubectl delete ns "${operators[@]}" --ignore-not-found --wait=true --timeout=90s >/dev/null 2>&1 || true
+
+  # 4. Anything still stuck on a finalizer (its operator is already gone): clear it, then delete again
+  for n in "${namespaces[@]}"; do
+    kubectl get ns "$n" >/dev/null 2>&1 || continue
+    for r in $(kubectl api-resources --namespaced --verbs=list -o name 2>/dev/null); do
+      for o in $(kubectl -n "$n" get "$r" -o name 2>/dev/null); do
+        kubectl -n "$n" patch "$o" --type merge -p '{"metadata":{"finalizers":null}}' >/dev/null 2>&1 || true
+      done
+    done
+  done
+  kubectl delete ns "${namespaces[@]}" --ignore-not-found --wait=true --timeout=2m >/dev/null 2>&1 \
+    || warn "some namespaces are still terminating: kubectl get ns"
+
+  # 5. The other cluster-wide objects of the components (ClusterRoles, ClusterIssuers, StorageClasses...), CRDs kept
+  log "removing the cluster-wide objects of the components"
+  # shellcheck disable=SC2046 # one resource name per word
+  delete_objects "$comps" "" $(kubectl api-resources --namespaced=false --verbs=list,delete -o name 2>/dev/null \
+    | grep -vxE 'customresourcedefinitions.apiextensions.k8s.io|namespaces|persistentvolumes')
+
+  # 6. Volumes whose claim was in those namespaces and that are still there (Retain policy, provisioner gone)
+  for o in $(kubectl get pv -o jsonpath='{range .items[*]}{.metadata.name}|{.spec.claimRef.namespace}{"\n"}{end}' 2>/dev/null); do
+    component_enabled "${o#*|}" "$(printf '%s\n' "${namespaces[@]}")" || continue
+    kubectl patch pv "${o%%|*}" --type merge -p '{"metadata":{"finalizers":null}}' >/dev/null 2>&1 || true
+    kubectl delete pv "${o%%|*}" --ignore-not-found --wait=false >/dev/null 2>&1 || true
+  done
+
+  # 7. CoreDNS: drop the *.<domain> -> Traefik rewrite added by internal_dns
+  corefile=$(kubectl -n kube-system get configmap coredns -o jsonpath='{.data.Corefile}' 2>/dev/null) || true
+  if grep -q "platform internal-dns" <<<"$corefile"; then
+    kubectl -n kube-system create configmap coredns --from-literal=Corefile="$(grep -v "platform internal-dns" <<<"$corefile")" \
+      --dry-run=client -o yaml | kubectl -n kube-system apply -f - >/dev/null 2>&1 || true
+    kubectl -n kube-system rollout restart deployment coredns >/dev/null 2>&1 || true
+  fi
+  rm -f "$ROOT/kstack-access.txt"
+  ok "done (kept: CRDs, Cilium)"
 }
 
 command -v yq >/dev/null 2>&1 || die "yq (mikefarah, v4) is required"
