@@ -85,6 +85,8 @@ spec:
     - https://github.com/me/web.git
   destinations:
     - {namespace: "*", server: https://kubernetes.default.svc}
+  clusterResourceWhitelist:
+    - {group: "", kind: Namespace}
 ```
 
 `appset.yaml` (one element = one app):
