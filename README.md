@@ -68,7 +68,7 @@ If your fork is private (GitLab, Gitea, private GitHub...), the installer needs 
 | I want to | Do this, then `git push` |
 |---|---|
 | Change my settings | Edit `cluster.yaml` |
-| Open ArgoCD, Grafana, Infisical from another IP | Add it to `global.platformAccess.allowedIPs` in `cluster.yaml` (others get 403): [Platform access](#platform-access) |
+| Open ArgoCD, Grafana, Infisical from another IP | Add it to `global.platformAccess.allowedIPs` in `cluster.yaml` (others get 403). Behind Cloudflare, a tunnel or at home: [Platform access](#platform-access) |
 | Turn a component on or off | Comment or uncomment it in `argocd/applications/platform/appset.yaml` |
 | See the deploy order | Stages and dependencies: [argocd/applications/platform/README.md](argocd/applications/platform/README.md) |
 | Deploy my app | Copy an example from `examples/` to `helm/apps/<my-app>/`: [docs/BOOTSTRAP-APP.md](docs/BOOTSTRAP-APP.md) |
@@ -83,24 +83,60 @@ Full docs: https://kinops.dev/docs
 
 ArgoCD, Grafana and Infisical only answer the IPs in `cluster.yaml`. Everyone else gets 403.
 
-The installer puts your public IP there. Your own apps in `helm/apps/` are not affected.
+The installer asks how the cluster is reached and fills it in. Your own apps in `helm/apps/` are not affected.
+
+Edit `cluster.yaml`, `git push`, done.
+
+### Public IP (VPS, bare metal)
+
+```yaml
+global:
+  platformAccess:
+    allowedIPs: [203.0.113.7/32]    # your public IP
+```
+
+### Behind Cloudflare or a load balancer
+
+Traefik must trust the proxy to read your real IP from `X-Forwarded-For`.
+
+```yaml
+global:
+  platformAccess:
+    allowedIPs: [203.0.113.7/32]    # your public IP
+traefik:
+  ports:
+    websecure:
+      forwardedHeaders:
+        trustedIPs: [173.245.48.0/20, ...]    # the proxy
+```
+
+`trustedIPs`:
+
+- Cloudflare proxied DNS: https://www.cloudflare.com/ips (the installer fetches them)
+- Cloudflare Tunnel, cloudflared in the cluster: the pod CIDR (k3s: `10.42.0.0/16`)
+- Other load balancer: its IPs
+
+### At home
 
 ```yaml
 global:
   platformAccess:
     allowedIPs:
-      - 203.0.113.7/32     # you
-      - 198.51.100.0/24    # your office
+      - 192.168.1.0/24    # your LAN
+      - 203.0.113.7/32    # your public IP (port forwarding)
 ```
 
-Edit, `git push`, done. `./install.sh doctor` shows the current list.
+From outside: a VPN, or a Cloudflare Tunnel (above).
 
-Behind a proxy or tunnel (Cloudflare tunnel, external load balancer): add the proxy IPs to
-`traefik.ports.websecure.forwardedHeaders.trustedIPs` in `cluster.yaml`. Traefik then reads the client IP from `X-Forwarded-For`.
+kind / minikube: add the Docker network of the node (e.g. `172.18.0.0/24`).
 
-kind / minikube: the browser comes from the Docker network of the node: add it (e.g. `172.18.0.0/24`).
+### Still 403?
 
-Open to everyone (not recommended): `allowedIPs: [0.0.0.0/0]`.
+See the IP Traefik refused (first field of each line):
+
+```bash
+kubectl -n traefik logs deploy/traefik | grep '" 403 '
+```
 
 Locked out? `kubectl -n argocd port-forward svc/argocd-server 8080:443` still works (https://localhost:8080).
 

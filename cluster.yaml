@@ -44,12 +44,12 @@ traefik:
     spec:
       # LoadBalancer (cloud, k3s, minikube tunnel, Cilium L2) | NodePort
       type: LoadBalancer
-  # Behind a proxy or tunnel (Cloudflare tunnel, external LB, SNAT): the IPs of that proxy.
+  # Behind a proxy (Cloudflare, Cloudflare tunnel: pod CIDR 10.42.0.0/16, load balancer): its IPs/CIDRs.
   # Traefik then reads the client IP from X-Forwarded-For (global.platformAccess uses it).
-  # ports:
-  #   websecure:
-  #     forwardedHeaders:
-  #       trustedIPs: [10.42.0.0/16]
+  ports:
+    websecure:
+      forwardedHeaders:
+        trustedIPs: []
   # NodePort only: the IP your browser uses to reach the node
   # providers:
   #   kubernetesIngress:

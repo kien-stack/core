@@ -32,6 +32,11 @@ traefik:
       type: LoadBalancer
       # Local keeps the real client IP (X-Forwarded-For). Required by OpenClaw, useful in access logs.
       externalTrafficPolicy: Local
+  # Only the 403s: shows the client IP Traefik saw (README "Still 403?")
+  accessLog:
+    enabled: true
+    filters:
+      statusCodes: "403"
   # extraObjects are rendered with tpl: HTTP listener (redirect + ACME HTTP01) + one HTTPS listener per app
   extraObjects:
     - |

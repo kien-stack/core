@@ -12,7 +12,7 @@
 #   argocd/app-of-apps.yaml  the repo/branch ArgoCD follows (same URL in argocd/applications/*/appset.yaml)
 #   argocd/applications/platform/appset.yaml   components + namespace: comment out an entry to disable it
 # After that, ArgoCD applies whatever you push.
-# Non-interactive: KSTACK_DOMAIN, KSTACK_EMAIL, KSTACK_IP, KSTACK_ALLOWED_IPS, KSTACK_CILIUM, KSTACK_YES=1 (KSTACK_REPO/KSTACK_BRANCH: default = this clone).
+# Non-interactive: KSTACK_DOMAIN, KSTACK_EMAIL, KSTACK_IP, KSTACK_EXPOSURE, KSTACK_PROXY, KSTACK_ALLOWED_IPS, KSTACK_CILIUM, KSTACK_YES=1 (KSTACK_REPO/KSTACK_BRANCH: default = this clone).
 # Optional environment variables (secrets, never stored in Git):
 #   GIT_USERNAME / GIT_TOKEN          private GitOps repo (HTTPS)
 #   DNS01_API_TOKEN                   if global.tls.issuer=letsencrypt-dns01
@@ -218,6 +218,39 @@ public_ip() {
 
 # global.platformAccess.allowedIPs of cluster.yaml, comma-separated
 allowed_ips() { yq -r '.global.platformAccess.allowedIPs // [] | join(",")' "$CONFIG"; }
+
+# Cloudflare edge ranges, comma-separated (offline: the list of 2026-11)
+cloudflare_ips() {
+  local ips
+  ips=$(curl -fsS --max-time 5 -w '\n' https://www.cloudflare.com/ips-v4 https://www.cloudflare.com/ips-v6 2>/dev/null) || true
+  if ! grep -qE '^[0-9.]+/[0-9]+$' <<<"$ips"; then
+    ips="173.245.48.0/20 103.21.244.0/22 103.22.200.0/22 103.31.4.0/22 141.101.64.0/18 108.162.192.0/18
+      190.93.240.0/20 188.114.96.0/20 197.234.240.0/22 198.41.128.0/17 162.158.0.0/15 104.16.0.0/13
+      104.24.0.0/14 172.64.0.0/13 131.0.72.0/22 2400:cb00::/32 2606:4700::/32 2803:f800::/32
+      2405:b500::/32 2405:8100::/32 2a06:98c0::/29 2c0f:f248::/32"
+  fi
+  tr -s ' \n' '\n' <<<"$ips" | grep -E '^[0-9a-f.:]+/[0-9]+$' | paste -sd, -
+}
+
+# Pod network of the cluster as /16s (k3s: 10.42.0.0/16): where an in-cluster cloudflared comes from
+pod_cidr() {
+  local cidrs
+  cidrs=$(kubectl get nodes -o jsonpath='{.items[*].spec.podCIDR}' 2>/dev/null \
+    | tr ' ' '\n' | awk -F. 'NF == 4 {print $1 "." $2 ".0.0/16"}' | sort -u | paste -sd, -)
+  printf '%s' "${cidrs:-10.42.0.0/16}"
+}
+
+# LAN of this machine (default route, e.g. 192.168.1.0/24), else the /24 of $1
+lan_cidr() {
+  local dev lan=""
+  if command -v ip >/dev/null; then
+    dev=$(ip -4 route show default 2>/dev/null | awk '{print $5; exit}')
+    if [ -n "$dev" ]; then
+      lan=$(ip -4 route show dev "$dev" scope link proto kernel 2>/dev/null | awk '$1 ~ /\// {print $1; exit}')
+    fi
+  fi
+  printf '%s' "${lan:-${1%.*}.0/24}"
+}
 
 # Components ArgoCD will deploy: the entries of the platform ApplicationSet list, + helm/apps/*.
 enabled_components() {
@@ -858,14 +891,35 @@ setup() {
   fi
   KSTACK_IP=$(ask "${KSTACK_IP:-}" "IP your browser uses to reach the cluster (Traefik node / LB)" "$ip")
   KSTACK_CILIUM=$(ask "${KSTACK_CILIUM:-}" "Install Cilium (only for a cluster created WITHOUT a CNI) true/false" false)
-  # Platform UIs: the current list, else this machine's public IP
-  local allowed
-  allowed=$(allowed_ips)
-  if [ -z "$allowed" ]; then
-    allowed=$(public_ip)
-    if [ -n "$allowed" ]; then
-      allowed="$allowed/32"
-    fi
+  # Platform UIs: who may open them (README "Platform access"). Guess: public node IP = public, private = home
+  local pub exposure=public proxies="" allowed given=${KSTACK_EXPOSURE:-}
+  pub=$(public_ip)
+  case "$ip" in
+    "$pub") ;;
+    10.*|192.168.*|172.1[6-9].*|172.2[0-9].*|172.3[01].*) exposure=home ;;
+  esac
+  if [ -n "$(cfg '.traefik.ports.websecure.forwardedHeaders.trustedIPs[0]')" ]; then
+    exposure=proxy
+  fi
+  pub=${pub:+$pub/32}
+  KSTACK_EXPOSURE=$(ask "${KSTACK_EXPOSURE:-}" "How is the cluster reached? public (IP on the Internet) | proxy (Cloudflare, tunnel, load balancer) | home (LAN behind a box)" "$exposure")
+  case "$KSTACK_EXPOSURE" in
+    public) allowed=$pub ;;
+    proxy)
+      KSTACK_PROXY=$(ask "${KSTACK_PROXY:-}" "Proxy: cloudflare | cloudflare-tunnel (cloudflared in the cluster) | its IPs/CIDRs (comma-separated)" \
+        "$(yq -r '.traefik.ports.websecure.forwardedHeaders.trustedIPs // [] | join(",") | select(. != "") // "cloudflare"' "$CONFIG")")
+      case "$KSTACK_PROXY" in
+        cloudflare) proxies=$(cloudflare_ips) ;;
+        cloudflare-tunnel) proxies=$(pod_cidr) ;;
+        *) proxies=$KSTACK_PROXY ;;
+      esac
+      allowed=$pub ;;
+    home) allowed=$(lan_cidr "$ip")${pub:+,$pub} ;;
+    *) die "KSTACK_EXPOSURE: public, proxy or home (got: $KSTACK_EXPOSURE)" ;;
+  esac
+  # ./install.sh configure: keep the current list unless KSTACK_EXPOSURE is given
+  if [ -z "$given" ] && [ -n "$(allowed_ips)" ]; then
+    allowed=$(allowed_ips)
   fi
   KSTACK_ALLOWED_IPS=$(ask "${KSTACK_ALLOWED_IPS:-}" "Public IPs/CIDRs of your browser allowed on ArgoCD, Grafana, Infisical (comma-separated)" "$allowed")
   local dom=${KSTACK_DOMAIN:-${KSTACK_IP}.sslip.io} tls=selfsigned issuer=selfsigned-ca
@@ -878,7 +932,10 @@ setup() {
   D="$dom" T="$tls" I="$issuer" E="${KSTACK_EMAIL:-admin@$dom}" yq -i '
     .global.domain = strenv(D) | .global.tls.issuer = strenv(T) | .global.issuer = strenv(I) |
     .global.tls.email = strenv(E)' "$CONFIG"
-  A="$KSTACK_ALLOWED_IPS" yq -i '.global.platformAccess.allowedIPs = (strenv(A) | split(",") | map(sub(" "; "")) | map(select(. != "")))' "$CONFIG"
+  A="$KSTACK_ALLOWED_IPS" yq -i '
+    .global.platformAccess.allowedIPs = (strenv(A) | split(",") | map(sub(" "; "")) | map(select(. != "")))' "$CONFIG"
+  P="$proxies" yq -i '
+    .traefik.ports.websecure.forwardedHeaders.trustedIPs = (strenv(P) | split(",") | map(select(. != "")))' "$CONFIG"
   if [ -z "$KSTACK_ALLOWED_IPS" ]; then
     warn "no allowed IP: the platform UIs answer 403 to everyone. Set global.platformAccess.allowedIPs in cluster.yaml"
   fi
