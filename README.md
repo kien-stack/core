@@ -67,7 +67,7 @@ More: [docs/BOOTSTRAP-APP.md](docs/BOOTSTRAP-APP.md)
 
 ### 2. From your own repo
 
-Create a project and an ApplicationSet in `argocd/applications/apps/my-app/`.
+Create a project and an ApplicationSet in `argocd/applications/apps/my-apps/`.
 
 `app-project.yaml`:
 
@@ -75,12 +75,14 @@ Create a project and an ApplicationSet in `argocd/applications/apps/my-app/`.
 apiVersion: argoproj.io/v1alpha1
 kind: AppProject
 metadata:
-  name: my-app
+  name: my-apps
   namespace: argocd
   annotations:
     argocd.argoproj.io/sync-wave: "-1"
 spec:
-  sourceRepos: [https://github.com/me/my-app.git]
+  sourceRepos:
+    - https://github.com/me/api.git
+    - https://github.com/me/web.git
   destinations:
     - {namespace: "*", server: https://kubernetes.default.svc}
 ```
@@ -91,22 +93,26 @@ spec:
 apiVersion: argoproj.io/v1alpha1
 kind: ApplicationSet
 metadata:
-  name: my-app
+  name: my-apps
   namespace: argocd
 spec:
   goTemplate: true
   generators:
     - list:
         elements:
-          - name: my-app
-            repoURL: https://github.com/me/my-app.git
-            namespace: my-app
+          - name: api
+            repoURL: https://github.com/me/api.git
+            namespace: shop
             path: chart
+          - name: web
+            repoURL: https://github.com/me/web.git
+            namespace: shop
+            path: deploy/helm
   template:
     metadata:
       name: "{{ .name }}"
     spec:
-      project: my-app
+      project: my-apps
       source:
         repoURL: "{{ .repoURL }}"
         targetRevision: main
@@ -125,8 +131,8 @@ Add both to `argocd/applications/apps/kustomization.yaml`, then `git push`:
 resources:
   - app-project.yaml
   - appset.yaml
-  - my-app/app-project.yaml
-  - my-app/appset.yaml
+  - my-apps/app-project.yaml
+  - my-apps/appset.yaml
 ```
 
 ## Platform access
