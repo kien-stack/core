@@ -833,11 +833,16 @@ summary() {
   printf '\n %sSaved to %s (no passwords)%s\n' "$COLOR_DIM" "$ROOT/kstack-access.txt" "$COLOR_RESET"
   rule "Platform access"
   if [ -z "$(allowed_ips)" ]; then
-    printf ' %s! ArgoCD, Grafana and Infisical are closed%s (403 for everyone)\n\n' "$COLOR_WARN" "$COLOR_RESET"
-    printf ' Open them to your IP in %scluster.yaml%s, then git push:\n' "$COLOR_BOLD" "$COLOR_RESET"
+    printf ' %sArgoCD, Grafana and Infisical are closed%s (403 for everyone)\n\n' "$COLOR_WARN" "$COLOR_RESET"
+    printf ' Access now:\n'
+    printf '   %s%-10s %-23s %s%s\n' "$COLOR_BOLD" UI URL COMMAND "$COLOR_RESET"
+    printf '   %-10s %-23s %s\n' \
+      ArgoCD https://localhost:8080 "kubectl -n argocd port-forward svc/argocd-server 8080:443" \
+      Grafana http://localhost:8081 "kubectl -n monitoring port-forward svc/monitoring-grafana 8081:80" \
+      Infisical http://localhost:8082 "kubectl -n infisical port-forward svc/infisical-infisical-standalone-infisical 8082:8080"
+    printf '\n Open them to your IP in %scluster.yaml%s, then git push:\n' "$COLOR_BOLD" "$COLOR_RESET"
     printf '   %sglobal:\n     platformAccess:\n       allowedIPs: [<your-ip>/32]%s\n\n' "$COLOR_DIM" "$COLOR_RESET"
     printf ' Behind Cloudflare or a load balancer: README > Platform access\n\n'
-    printf ' Meanwhile:\n   kubectl -n argocd port-forward svc/argocd-server 8080:443\n\n'
   else
     printf ' ArgoCD, Grafana and Infisical only answer: %s\n\n' "$(allowed_ips)"
   fi
