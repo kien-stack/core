@@ -12,7 +12,7 @@ examples/          app charts to copy into helm/apps/
 scripts/           one-line install / try scripts
 hack/              repo checks (validate, network policies)
 docs/              guides
-cluster.yaml       your cluster settings (domain, options)
+cluster.yaml       kinops defaults (domain, options); yours go to cluster.local.yaml
 install.sh         bootstrap: doctor, install
 ```
 
@@ -75,7 +75,7 @@ dependencies:
 
 - **Change settings:** edit `values.yaml` (keys go under the dependency name, e.g. `traefik:`), push.
 - **Bump the upstream chart:** change `version` in `Chart.yaml`, push.
-- **Cluster-wide settings** (domain, options): `cluster.yaml`, passed to every component.
+- **Cluster-wide settings** (domain, options): `cluster.yaml` (defaults) then `cluster.local.yaml` (yours), passed to every component.
 
 ## helm/apps/
 

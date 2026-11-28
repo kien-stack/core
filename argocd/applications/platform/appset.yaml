@@ -1,5 +1,5 @@
 # The base platform: one Application per entry of the list below (component + namespace).
-# repoURL/revision: your fork (same as argocd/app-of-apps.yaml). Values: values.yaml + /cluster.yaml.
+# repoURL/revision: your fork (same as argocd/app-of-apps.yaml). Values: values.yaml + /cluster.yaml + /cluster.local.yaml.
 apiVersion: argoproj.io/v1alpha1
 kind: ApplicationSet
 metadata:
@@ -91,10 +91,12 @@ spec:
         path: "helm/platform/{{ .app }}"
         helm:
           releaseName: "{{ .app }}"
-          # Your settings: see /cluster.yaml
+          # kinops defaults (/cluster.yaml), then your settings (/cluster.local.yaml, written by ./install.sh)
           valueFiles:
             - values.yaml
             - ../../../cluster.yaml
+            - ../../../cluster.local.yaml
+          ignoreMissingValueFiles: true
       destination:
         server: https://kubernetes.default.svc
         namespace: "{{ .namespace }}"

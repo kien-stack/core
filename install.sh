@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # kinops Community installer (free, Apache-2.0). Run it from a clone of YOUR fork (or curl .../scripts/install.sh | bash).
-# First run (cluster.yaml still on example.com) asks a few questions, writes cluster.yaml + argocd/, commits and pushes.
+# First run (no domain yet) asks a few questions, writes cluster.local.yaml + argocd/, commits and pushes.
 #   ./install.sh             configure if needed, then install (default)
 #   ./install.sh configure   ask the questions again, commit, push, install
 #   ./install.sh doctor      check the cluster and the repo
@@ -9,7 +9,8 @@
 #   ./install.sh password argocd|infisical|grafana   print a login (once its app is deployed)
 # KSTACK_VERBOSE=1 shows every step in detail.
 # Everything it uses is in Git, nothing is generated:
-#   cluster.yaml             your settings (domain, TLS...), passed to every chart
+#   cluster.yaml             kinops defaults, passed to every chart (releases update it: do not edit)
+#   cluster.local.yaml       your settings (domain, TLS...), on top of cluster.yaml (not in kinops: releases never touch it)
 #   argocd/app-of-apps.yaml  the repo/branch ArgoCD follows (same URL in argocd/applications/*/appset.yaml)
 #   argocd/applications/platform/appset.yaml   components + namespace: comment out an entry to disable it
 # After that, ArgoCD applies whatever you push.
@@ -20,7 +21,7 @@
 #   EXTERNAL_DNS_API_TOKEN            if the external-dns component is enabled
 #
 # What `./install.sh` (install) does, in order:
-#   1. setup              first run only: questions, write cluster.yaml + argocd/, commit and push
+#   1. setup              first run only: questions, write cluster.local.yaml + argocd/, commit and push
 #   2. doctor             checks: tools, cluster, Git repo, domain, TLS
 #   3. bootstrap_secrets  the secrets ArgoCD cannot create (DNS01 / external-dns API tokens)
 #   4. internal_dns       sslip.io / nip.io: CoreDNS resolves *.<domain> to Traefik inside the cluster
@@ -32,7 +33,8 @@
 set -euo pipefail
 
 ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
-CONFIG="$ROOT/cluster.yaml"
+CONFIG="$ROOT/cluster.yaml"         # kinops defaults
+LOCAL="$ROOT/cluster.local.yaml"    # your settings, on top (like ArgoCD valueFiles)
 APP="$ROOT/argocd/app-of-apps.yaml"
 APPSET="$ROOT/argocd/applications/platform/appset.yaml"
 PACK=community
@@ -198,7 +200,12 @@ while [ $# -gt 0 ]; do
   shift
 done
 
-cfg()  { yq -r "$1 // \"\"" "$CONFIG"; }
+# settings: cluster.yaml, then cluster.local.yaml on top (maps merged, lists replaced, like Helm)
+# shellcheck disable=SC2016 # $i is a yq variable
+settings() {
+  if [ -f "$LOCAL" ]; then yq ea '. as $i ireduce ({}; . * $i)' "$CONFIG" "$LOCAL"; else cat "$CONFIG"; fi
+}
+cfg()  { settings | yq -r "$1 // \"\"" -; }
 repo() { yq -r '.spec.source.repoURL' "$APP"; }
 rev()  { yq -r '.spec.source.targetRevision' "$APP"; }
 
@@ -216,8 +223,8 @@ run_timeout() {
 }
 b64() { base64 | tr -d '\n'; }
 
-# global.platformAccess.allowedIPs of cluster.yaml, comma-separated
-allowed_ips() { yq -r '.global.platformAccess.allowedIPs // [] | join(",")' "$CONFIG"; }
+# global.platformAccess.allowedIPs of your settings, comma-separated
+allowed_ips() { settings | yq -r '.global.platformAccess.allowedIPs // [] | join(",")' -; }
 
 # Components ArgoCD will deploy: the entries of the platform ApplicationSet list, + helm/apps/*.
 enabled_components() {
@@ -265,7 +272,7 @@ git_ls_remote() {
 # Gateway API CRDs already installed by the distribution (k3s, RKE2, AKS, GKE...): kinops can leave them alone.
 gateway_crds_check() {
   local crd version owner
-  [ "$(yq -r '."gateway-api-crd".enabled' "$CONFIG")" != false ] || return 0
+  [ "$(settings | yq -r '."gateway-api-crd".enabled' -)" != false ] || return 0
   if ! crd=$(kubectl get crd gateways.gateway.networking.k8s.io -o json 2>/dev/null); then
     ok "Gateway API CRDs: installed by kinops"
     return 0
@@ -277,7 +284,7 @@ gateway_crds_check() {
   version=$(yq -r '.metadata.annotations."gateway.networking.k8s.io/bundle-version" // "?"' <<<"$crd")
   owner=$(yq -r '.metadata.annotations."meta.helm.sh/release-name"
     // .metadata.labels."app.kubernetes.io/managed-by" // ""' <<<"$crd")
-  warn "Gateway API CRDs $version already on this cluster${owner:+ ($owner)}. To keep them and skip ours, add to cluster.yaml:
+  warn "Gateway API CRDs $version already on this cluster${owner:+ ($owner)}. To keep them and skip ours, add to cluster.local.yaml:
      gateway-api-crd: {enabled: false}"
 }
 
@@ -366,8 +373,8 @@ doctor() {
   if [ -n "${KSTACK_DEMO:-}" ]; then
     ok "demo mode: local settings, ArgoCD follows the public release"
   elif git -C "$ROOT" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
-    if [ -n "$(git -C "$ROOT" status --porcelain -- cluster.yaml argocd helm 2>/dev/null)" ]; then
-      ko "uncommitted changes in cluster.yaml / argocd/ / helm/: ArgoCD only sees Git. Commit and push them: git -C $ROOT commit -am 'my settings' && git -C $ROOT push"
+    if [ -n "$(git -C "$ROOT" status --porcelain -- cluster.yaml cluster.local.yaml argocd helm 2>/dev/null)" ]; then
+      ko "uncommitted changes in cluster*.yaml / argocd/ / helm/: ArgoCD only sees Git. Commit and push them: git -C $ROOT add -A && git -C $ROOT commit -m 'my settings' && git -C $ROOT push"
       fail=1
     else
       local remote_sha head_sha
@@ -389,7 +396,7 @@ doctor() {
   local domain
   domain=$(cfg .global.domain)
   if [ -z "$domain" ] || [ "$domain" = example.com ]; then
-    ko "set global.domain in cluster.yaml (no domain? <node-ip>.sslip.io)"
+    ko "set global.domain in cluster.local.yaml (no domain? <node-ip>.sslip.io)"
     fail=1
   elif getent hosts "argocd.$domain" >/dev/null 2>&1; then
     ok "DNS: argocd.$domain -> $(getent hosts "argocd.$domain" | awk '{print $1; exit}')"
@@ -426,7 +433,7 @@ doctor() {
   local allowed
   allowed=$(allowed_ips)
   if [ -z "$allowed" ]; then
-    warn "platform UIs (ArgoCD, Grafana, Infisical) are closed: add your IP to global.platformAccess.allowedIPs in cluster.yaml, then git push"
+    warn "platform UIs (ArgoCD, Grafana, Infisical) are closed: add your IP to global.platformAccess.allowedIPs in cluster.local.yaml, then git push"
   elif [[ ",$allowed," == *",0.0.0.0/0,"* ]]; then
     warn "platform UIs open to the whole Internet (global.platformAccess.allowedIPs: 0.0.0.0/0)"
   else
@@ -441,7 +448,7 @@ doctor() {
 }
 
 # ---------------------------------------------------------------- install
-# Install helm/platform/<name> once with Helm, exactly like ArgoCD will (values.yaml + cluster.yaml);
+# Install helm/platform/<name> once with Helm, exactly like ArgoCD will (values.yaml + cluster.yaml + cluster.local.yaml);
 # same release name, so ArgoCD takes it over.
 helm_bootstrap() {
   local name=$1 ns=$2 out attempt
@@ -456,6 +463,7 @@ helm_bootstrap() {
     warn "downloading the $name chart failed, retrying ($attempt/4)"
     sleep $((attempt * 10))
   done
+  [ ! -f "$LOCAL" ] || set -- -f "$LOCAL" "$@"
   if ! out=$(helm upgrade --install "$name" "$ROOT/helm/platform/$name" -n "$ns" --create-namespace \
     -f "$CONFIG" "$@" --wait --timeout 10m 2>&1); then
     clear_busy_line
@@ -802,7 +810,7 @@ access_hint() {
     printf ' %sPlatform UIs answer 403 to that tunnel: run the demo again with%s\n    %sKSTACK_ALLOWED_IPS=%s%s\n' \
       "$COLOR_TITLE" "$COLOR_RESET" "$COLOR_BOLD" "$docker_net" "$COLOR_RESET"
   else
-    printf ' %sPlatform UIs answer 403 to that tunnel: add it to global.platformAccess.allowedIPs (cluster.yaml)%s\n    %s%s%s\n' \
+    printf ' %sPlatform UIs answer 403 to that tunnel: add it to global.platformAccess.allowedIPs (cluster.local.yaml)%s\n    %s%s%s\n' \
       "$COLOR_TITLE" "$COLOR_RESET" "$COLOR_BOLD" "$docker_net" "$COLOR_RESET"
   fi
 }
@@ -849,21 +857,21 @@ summary() {
       ArgoCD https://localhost:8080 "kubectl -n argocd port-forward svc/argocd-server 8080:443" \
       Grafana http://localhost:8081 "kubectl -n monitoring port-forward svc/monitoring-grafana 8081:80" \
       Infisical http://localhost:8082 "kubectl -n infisical port-forward svc/infisical-infisical-standalone-infisical 8082:8080"
-    printf '\n Open them to your IP in %scluster.yaml%s, then git push:\n' "$COLOR_BOLD" "$COLOR_RESET"
+    printf '\n Open them to your IP in %scluster.local.yaml%s, then git push:\n' "$COLOR_BOLD" "$COLOR_RESET"
     printf '   %sglobal:\n     platformAccess:\n       allowedIPs: [<your-ip>/32]%s\n\n' "$COLOR_DIM" "$COLOR_RESET"
     printf ' Behind Cloudflare or a load balancer: README > Platform access\n\n'
   else
     printf ' ArgoCD, Grafana and Infisical only answer: %s\n\n' "$(allowed_ips)"
   fi
   if [ -z "${KSTACK_DEMO:-}" ]; then
-    echo " To change anything: edit cluster.yaml or helm/, then git push"
+    echo " To change anything: edit cluster.local.yaml or helm/, then git push"
   fi
   return 0
 }
 
 # ---------------------------------------------------------------- configure (first run)
-# When cluster.yaml still has example.com (or ArgoCD does not follow this clone yet), or with `configure`:
-# ask a few questions, write cluster.yaml + argocd/, show the diff, commit and push. Never in demo mode (try.sh).
+# When there is no domain yet (or ArgoCD does not follow this clone yet), or with `configure`:
+# ask a few questions, write cluster.local.yaml + argocd/, show the diff, commit and push. Never in demo mode (try.sh).
 
 # can_prompt: is there a terminal to ask questions on (also true under curl | bash)?
 can_prompt() { { : </dev/tty; } 2>/dev/null; }
@@ -892,7 +900,7 @@ setup() {
   # Already configured for this clone: install as is
   if [ -z "$force" ] && [ "$(repo)" = "$origin" ] && [ "$(rev)" = "$branch" ] \
      && [ -n "$(cfg .global.domain)" ] && [ "$(cfg .global.domain)" != example.com ]; then
-    log "configured (cluster.yaml: $(cfg .global.domain)): installing as is (./install.sh configure to change)"
+    log "configured (cluster.local.yaml: $(cfg .global.domain)): installing as is (./install.sh configure to change)"
     return 0
   fi
   if is_public_repo "$origin"; then
@@ -918,11 +926,12 @@ setup() {
     issuer=letsencrypt
   fi
 
-  # 1. cluster.yaml: your settings
+  # 1. cluster.local.yaml: your settings (cluster.yaml stays as kinops ships it)
+  [ -f "$LOCAL" ] || printf '# Your settings, on top of cluster.yaml (kinops defaults). Releases never touch this file.\n' > "$LOCAL"
   D="$dom" T="$tls" I="$issuer" E="${KSTACK_EMAIL:-admin@$dom}" yq -i '
     .global.domain = strenv(D) | .global.tls.issuer = strenv(T) | .global.issuer = strenv(I) |
-    .global.tls.email = strenv(E)' "$CONFIG"
-  A="$KSTACK_ALLOWED_IPS" yq -i '.global.platformAccess.allowedIPs = (strenv(A) | split(",") | map(sub(" "; "")) | map(select(. != "")))' "$CONFIG"
+    .global.tls.email = strenv(E)' "$LOCAL"
+  A="$KSTACK_ALLOWED_IPS" yq -i '.global.platformAccess.allowedIPs = (strenv(A) | split(",") | map(sub(" "; "")) | map(select(. != "")))' "$LOCAL"
   # 2. argocd/: ArgoCD follows your fork
   R="$origin" B="$branch" yq -i '.spec.source.repoURL = strenv(R) | .spec.source.targetRevision = strenv(B)' "$APP"
   local f
@@ -935,7 +944,7 @@ setup() {
   if [ "$KSTACK_CILIUM" = true ] && ! component_enabled cilium "$(enabled_components)"; then
     yq -i '.spec.generators[0].list.elements += [{"app": "cilium", "namespace": "kube-system", "stage": "1"}]' "$APPSET"
     IP="$KSTACK_IP" yq -i '.cilium.k8sServiceHost = strenv(IP) | .cilium.k8sServicePort = 6443 |
-      .cilium.ipam = {"mode": "cluster-pool", "operator": {"clusterPoolIPv4PodCIDRList": ["10.42.0.0/16"]}}' "$CONFIG"
+      .cilium.ipam = {"mode": "cluster-pool", "operator": {"clusterPoolIPv4PodCIDRList": ["10.42.0.0/16"]}}' "$LOCAL"
   fi
   # k3s & co already run a metrics-server: do not deploy ours
   if foreign_metrics_server; then
@@ -946,13 +955,14 @@ setup() {
   fi
 
   # 4. commit and push (after a confirmation when someone is at the terminal)
-  if [ -z "$(git -C "$ROOT" status --porcelain -- cluster.yaml argocd)" ]; then
+  if [ -z "$(git -C "$ROOT" status --porcelain -- cluster.local.yaml argocd)" ]; then
     ok "nothing to change"
     return 0
   fi
+  git -C "$ROOT" add -- cluster.local.yaml argocd
   log "changes to your fork:"
-  git -C "$ROOT" --no-pager diff --stat
-  git -C "$ROOT" --no-pager diff -- cluster.yaml argocd/app-of-apps.yaml
+  git -C "$ROOT" --no-pager diff --cached --stat
+  git -C "$ROOT" --no-pager diff --cached -- cluster.local.yaml argocd/app-of-apps.yaml
   if [ -z "${KSTACK_YES:-}" ] && can_prompt; then
     local answer
     read -r -p "  ${COLOR_PROMPT}Commit and push to ${origin} (${branch})?${COLOR_STDERR_RESET} [Y/n]: " answer </dev/tty || true
@@ -962,7 +972,7 @@ setup() {
     esac
   fi
   git -C "$ROOT" -c user.name="${GIT_AUTHOR_NAME:-kinops}" -c user.email="${GIT_AUTHOR_EMAIL:-kinops@localhost}" \
-    commit -qm "kinops: my settings (domain $dom)" -- cluster.yaml argocd || die "git commit failed"
+    commit -qm "kinops: my settings (domain $dom)" -- cluster.local.yaml argocd || die "git commit failed"
   local auth=()
   if [ -n "${GIT_TOKEN:-}" ]; then
     auth=(-c "http.extraheader=Authorization: Basic $(printf '%s:%s' "${GIT_USERNAME:-git}" "$GIT_TOKEN" | b64)")

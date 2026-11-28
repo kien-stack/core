@@ -22,6 +22,8 @@ curl -fsSL https://raw.githubusercontent.com/kinopshq/core/main/scripts/install.
 
 Or from your clone: `./install.sh` (`./install.sh configure` to change the answers).
 
+Your settings live in `cluster.local.yaml` (on top of the defaults in `cluster.yaml`, which releases update): edit it, then `git push`.
+
 Requirements: a Kubernetes cluster (2 vCPU, 8 GB RAM), `kubectl`, `helm`, `git`.
 
 ### Private repo
@@ -137,7 +139,7 @@ resources:
 
 ArgoCD, Grafana and Infisical are closed by default (403).
 
-Open them to your IP in `cluster.yaml`, then `git push`:
+Open them to your IP in `cluster.local.yaml`, then `git push`:
 
 ```yaml
 global:
