@@ -43,6 +43,8 @@ If your fork is private (GitLab, Gitea, private GitHub...), the installer needs 
    curl -fsSL https://raw.githubusercontent.com/kinopshq/core/main/scripts/install.sh | bash
    ```
 
+The same token lets ArgoCD read your app repos of the same owner: give it read access to them too (GitHub: Contents: Read).
+
 > [!NOTE]
 > Use `export`. With `GIT_TOKEN=... curl ... | bash`, only `curl` gets the token, not the installer.
 

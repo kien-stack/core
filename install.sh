@@ -571,14 +571,14 @@ kind: Secret
 metadata:
   name: gitops-repo
   namespace: argocd
-  labels: {argocd.argoproj.io/secret-type: repository}
+  labels: {argocd.argoproj.io/secret-type: repo-creds}
 stringData:
   type: git
-  url: $(repo)
+  url: $(r=$(repo); echo "${r%/*}")
   username: ${GIT_USERNAME:-git}
   password: ${GIT_TOKEN}
 YAML
-    ok "GitOps repo credential registered in ArgoCD"
+    ok "Git credential registered in ArgoCD (fork + your other repos of the same owner)"
   fi
 
   local resync=""
