@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.5.1](https://github.com/kinopshq/core/compare/v0.5.0...v0.5.1) (2026-11-28)
+
+
+### Features
+
+* platform UIs closed by default, note to add your IP ([#139](https://github.com/kinopshq/core/issues/139)) ([7573e0b](https://github.com/kinopshq/core/commit/7573e0b15401dc1b470765412a66cbe92a31523c))
+
+
+### Bug fixes
+
+* **try:** platform UIs answer the kind/minikube tunnel; re-run applies new settings ([#140](https://github.com/kinopshq/core/issues/140)) ([ee66037](https://github.com/kinopshq/core/commit/ee66037dcd758b135b0c31754805a921fcc39dcf))
+* uninstall removes everything, local clone included ([#136](https://github.com/kinopshq/core/issues/136)) ([5146f45](https://github.com/kinopshq/core/commit/5146f4536108373f9159170d829efbb148dd245e))
+* **uninstall:** show what goes away as a table (namespace, pods, PVCs, storage) ([#138](https://github.com/kinopshq/core/issues/138)) ([d5a0321](https://github.com/kinopshq/core/commit/d5a0321a41df87540613e5faea5d3381043bef68))
+
 ## [0.5.0](https://github.com/kinopshq/core/compare/v0.4.10...v0.5.0) (2026-11-28)
 
 
