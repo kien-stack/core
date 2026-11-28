@@ -14,6 +14,10 @@ spec:
   rules:
     - matches:
         - path: {type: PathPrefix, value: /}
+      # Only global.platformAccess.allowedIPs (cluster.yaml): templates/platform-access.yaml
+      filters:
+        - type: ExtensionRef
+          extensionRef: {group: traefik.io, kind: Middleware, name: platform-access}
       backendRefs:
         - group: ""
           kind: Service

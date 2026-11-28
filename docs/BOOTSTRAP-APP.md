@@ -31,6 +31,21 @@ ArgoCD picks up the new folder and creates the `my-app` application.
   kubectl -n my-app get pods
   ```
 
+## Restrict it to some IPs (optional)
+
+Your app is open to everyone by default.
+
+To allow only `global.platformAccess.allowedIPs` (like ArgoCD, Grafana, Infisical):
+
+1. Copy `helm/platform/monitoring/templates/platform-access.yaml` to `helm/apps/my-app/templates/`.
+2. Add this filter to your route rule (`route.main.rules[]` in values.yaml):
+
+   ```yaml
+   filters:
+     - type: ExtensionRef
+       extensionRef: {group: traefik.io, kind: Middleware, name: platform-access}
+   ```
+
 ## Examples
 
 In [`examples/`](../examples/):

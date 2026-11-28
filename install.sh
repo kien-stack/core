@@ -12,7 +12,7 @@
 #   argocd/app-of-apps.yaml  the repo/branch ArgoCD follows (same URL in argocd/applications/*/appset.yaml)
 #   argocd/applications/platform/appset.yaml   components + namespace: comment out an entry to disable it
 # After that, ArgoCD applies whatever you push.
-# Non-interactive: KSTACK_DOMAIN, KSTACK_EMAIL, KSTACK_IP, KSTACK_CILIUM, KSTACK_YES=1 (KSTACK_REPO/KSTACK_BRANCH: default = this clone).
+# Non-interactive: KSTACK_DOMAIN, KSTACK_EMAIL, KSTACK_IP, KSTACK_ALLOWED_IPS, KSTACK_CILIUM, KSTACK_YES=1 (KSTACK_REPO/KSTACK_BRANCH: default = this clone).
 # Optional environment variables (secrets, never stored in Git):
 #   GIT_USERNAME / GIT_TOKEN          private GitOps repo (HTTPS)
 #   DNS01_API_TOKEN                   if global.tls.issuer=letsencrypt-dns01
@@ -206,6 +206,18 @@ run_timeout() {
   fi
 }
 b64() { base64 | tr -d '\n'; }
+
+# Public IP of this machine (what the Internet sees), empty if unknown. Default of global.platformAccess.allowedIPs.
+public_ip() {
+  local ip
+  ip=$(curl -fsS --max-time 5 https://api.ipify.org 2>/dev/null) || true
+  if [[ "$ip" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+    printf '%s' "$ip"
+  fi
+}
+
+# global.platformAccess.allowedIPs of cluster.yaml, comma-separated
+allowed_ips() { yq -r '.global.platformAccess.allowedIPs // [] | join(",")' "$CONFIG"; }
 
 # Components ArgoCD will deploy: the entries of the platform ApplicationSet list, + helm/apps/*.
 enabled_components() {
@@ -409,6 +421,17 @@ doctor() {
       fail=1
       ;;
   esac
+
+  # Who can open the platform UIs (ArgoCD, Grafana, Infisical)
+  local allowed
+  allowed=$(allowed_ips)
+  if [ -z "$allowed" ]; then
+    warn "global.platformAccess.allowedIPs is empty: the platform UIs answer 403 to everyone. Add your IP in cluster.yaml, then git push"
+  elif [[ ",$allowed," == *",0.0.0.0/0,"* ]]; then
+    warn "platform UIs open to the whole Internet (global.platformAccess.allowedIPs: 0.0.0.0/0)"
+  else
+    ok "platform UIs allowed from: $allowed"
+  fi
   if [ "$fail" -eq 0 ]; then
     log "doctor: OK"
   else
@@ -730,6 +753,20 @@ access_hint() {
   rule "Before you start"
   printf ' %sIn another terminal, keep this running (gives Traefik its IP):%s\n    %s%s%s\n' \
     "$COLOR_TITLE" "$COLOR_RESET" "$COLOR_BOLD" "$tunnel" "$COLOR_RESET"
+  # The browser then reaches Traefik from the node's Docker network, not from your public IP
+  local node_ip docker_net
+  node_ip=$(kubectl get nodes -o jsonpath='{.items[0].status.addresses[?(@.type=="InternalIP")].address}' 2>/dev/null) || true
+  docker_net="${node_ip%.*}.0/24"
+  if [[ ",$(allowed_ips)," == *",$docker_net,"* ]]; then
+    return 0
+  fi
+  if [ -n "${KSTACK_DEMO:-}" ]; then
+    printf ' %sPlatform UIs answer 403 to that tunnel: run the demo again with%s\n    %sKSTACK_ALLOWED_IPS=%s%s\n' \
+      "$COLOR_TITLE" "$COLOR_RESET" "$COLOR_BOLD" "$docker_net" "$COLOR_RESET"
+  else
+    printf ' %sPlatform UIs answer 403 to that tunnel: add it to global.platformAccess.allowedIPs (cluster.yaml)%s\n    %s%s%s\n' \
+      "$COLOR_TITLE" "$COLOR_RESET" "$COLOR_BOLD" "$docker_net" "$COLOR_RESET"
+  fi
 }
 
 # At the end: the /etc/hosts line with the real Traefik IP, if the URLs do not resolve to it
@@ -765,6 +802,7 @@ summary() {
   printf '%s\n' "$out" >"$ROOT/kstack-access.txt"
   printf '%s\n' "$out" | sed -E "s/^ ([A-Za-z]+)/ ${COLOR_BOLD}\1${COLOR_RESET}/"   # titles in bold
   printf '\n %sSaved to %s (no passwords)%s\n' "$COLOR_DIM" "$ROOT/kstack-access.txt" "$COLOR_RESET"
+  printf ' Platform UIs only answer: %s (global.platformAccess.allowedIPs)\n' "$(allowed_ips)"
   if [ -z "${KSTACK_DEMO:-}" ]; then
     echo " To change anything: edit cluster.yaml or helm/, then git push"
   fi
@@ -820,6 +858,16 @@ setup() {
   fi
   KSTACK_IP=$(ask "${KSTACK_IP:-}" "IP your browser uses to reach the cluster (Traefik node / LB)" "$ip")
   KSTACK_CILIUM=$(ask "${KSTACK_CILIUM:-}" "Install Cilium (only for a cluster created WITHOUT a CNI) true/false" false)
+  # Platform UIs: the current list, else this machine's public IP
+  local allowed
+  allowed=$(allowed_ips)
+  if [ -z "$allowed" ]; then
+    allowed=$(public_ip)
+    if [ -n "$allowed" ]; then
+      allowed="$allowed/32"
+    fi
+  fi
+  KSTACK_ALLOWED_IPS=$(ask "${KSTACK_ALLOWED_IPS:-}" "Public IPs/CIDRs of your browser allowed on ArgoCD, Grafana, Infisical (comma-separated)" "$allowed")
   local dom=${KSTACK_DOMAIN:-${KSTACK_IP}.sslip.io} tls=selfsigned issuer=selfsigned-ca
   if [ -n "$KSTACK_EMAIL" ]; then
     tls=letsencrypt-http01
@@ -830,6 +878,10 @@ setup() {
   D="$dom" T="$tls" I="$issuer" E="${KSTACK_EMAIL:-admin@$dom}" yq -i '
     .global.domain = strenv(D) | .global.tls.issuer = strenv(T) | .global.issuer = strenv(I) |
     .global.tls.email = strenv(E)' "$CONFIG"
+  A="$KSTACK_ALLOWED_IPS" yq -i '.global.platformAccess.allowedIPs = (strenv(A) | split(",") | map(sub(" "; "")) | map(select(. != "")))' "$CONFIG"
+  if [ -z "$KSTACK_ALLOWED_IPS" ]; then
+    warn "no allowed IP: the platform UIs answer 403 to everyone. Set global.platformAccess.allowedIPs in cluster.yaml"
+  fi
   # 2. argocd/: ArgoCD follows your fork
   R="$origin" B="$branch" yq -i '.spec.source.repoURL = strenv(R) | .spec.source.targetRevision = strenv(B)' "$APP"
   local f

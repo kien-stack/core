@@ -4,7 +4,7 @@
 #   curl -fsSL https://raw.githubusercontent.com/kinopshq/core/main/scripts/try.sh | bash -s uninstall
 # Uses the public repo on main (ArgoCD follows main; pin a release with KSTACK_REF=vX.Y.Z),
 # <node-ip>.sslip.io and self-signed certs. For real use: https://raw.githubusercontent.com/kinopshq/core/main/scripts/install.sh
-# Overrides: KSTACK_IP, KSTACK_REF. Requires kubectl, helm, git (yq is fetched if missing).
+# Overrides: KSTACK_IP, KSTACK_REF, KSTACK_ALLOWED_IPS. Requires kubectl, helm, git (yq is fetched if missing).
 set -euo pipefail
 KSTACK_PWD=$PWD   # where the user runs this: install.sh prints the commands relative to it
 REPO=${KSTACK_SOURCE:-https://github.com/kinopshq/core}
@@ -136,12 +136,22 @@ fi
 # So, and ONLY in this demo, the root Application pins $REF and overrides global.domain.
 # A real install has none of this: ./install.sh writes your settings into your fork.
 D="$dom" yq -i '.global.domain = strenv(D)' cluster.yaml
+# Platform UIs (ArgoCD, Grafana, Infisical) only answer these IPs: KSTACK_ALLOWED_IPS, else this machine's public IP.
+allowed=${KSTACK_ALLOWED_IPS:-}
+if [ -z "$allowed" ]; then
+  public=$(curl -fsS --max-time 5 https://api.ipify.org 2>/dev/null || true)
+  if [[ "$public" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+    allowed="$public/32"
+  fi
+fi
+A="$allowed" yq -i '.global.platformAccess.allowedIPs = (strenv(A) | split(",") | map(sub(" "; "")) | map(select(. != "")))' cluster.yaml
+allowed_json=$(yq -o=json -I=0 '.global.platformAccess.allowedIPs' cluster.yaml)
 # k3s & co already run a metrics-server: do not deploy ours
 if [ -n "$(kubectl -n kube-system get deploy metrics-server -o jsonpath='{.spec.selector.matchLabels.k8s-app}' 2>/dev/null)" ]; then
   yq -i 'del(.spec.generators[0].list.elements[] | select(.app == "metrics-server"))' "$APPSET"
 fi
 # Kustomize patches applied by the root Application to the ApplicationSets it creates (JSON patches):
-#   - every ApplicationSet: its apps follow $REF and get global.domain = <ip>.sslip.io
+#   - every ApplicationSet: its apps follow $REF and get global.domain = <ip>.sslip.io + global.platformAccess
 #   - "apps": its Git generator reads $REF
 #   - "platform": the component list edited above (metrics-server maybe removed)
 components=$(yq -o=json -I=0 '.spec.generators[0].list.elements' "$APPSET")
@@ -149,7 +159,7 @@ patches=$(cat <<YAML
 - target: {kind: ApplicationSet}
   patch:
     - {op: replace, path: /spec/template/spec/source/targetRevision, value: "$REF"}
-    - {op: add, path: /spec/template/spec/source/helm/valuesObject, value: {global: {domain: "$dom"}}}
+    - {op: add, path: /spec/template/spec/source/helm/valuesObject, value: {global: {domain: "$dom", platformAccess: {allowedIPs: $allowed_json}}}}
 - target: {kind: ApplicationSet, name: apps}
   patch:
     - {op: replace, path: /spec/generators/0/git/revision, value: "$REF"}

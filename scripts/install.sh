@@ -5,8 +5,8 @@
 # Before: fork https://github.com/kinopshq/core (you need push access to your fork).
 # Clones YOUR fork, then runs its ./install.sh (questions on first run, commit + push, install).
 # Same as: git clone <your fork> && cd <it> && ./install.sh
-# Non-interactive: KSTACK_REPO, KSTACK_BRANCH, KSTACK_DOMAIN, KSTACK_EMAIL, KSTACK_IP, KSTACK_CILIUM,
-# KSTACK_YES=1; GIT_USERNAME/GIT_TOKEN for a private repo. Requires kubectl, helm, git.
+# Non-interactive: KSTACK_REPO, KSTACK_BRANCH, KSTACK_DOMAIN, KSTACK_EMAIL, KSTACK_IP, KSTACK_ALLOWED_IPS,
+# KSTACK_CILIUM, KSTACK_YES=1; GIT_USERNAME/GIT_TOKEN for a private repo. Requires kubectl, helm, git.
 set -euo pipefail
 UPSTREAM=https://github.com/kinopshq/core
 DIR=${KSTACK_DIR:-$HOME/kinops}
