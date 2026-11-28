@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.5.2](https://github.com/kinopshq/core/compare/v0.5.1...v0.5.2) (2026-11-28)
+
+
+### Bug fixes
+
+* **argocd:** git token covers all repos of the fork owner (repo-creds) ([#144](https://github.com/kinopshq/core/issues/144)) ([9aa0830](https://github.com/kinopshq/core/commit/9aa083055fb8391febbbb3d558f358260d8207ac))
+
+
+### Documentation
+
+* **readme:** shorter README, deploy your app (this repo or your own) ([#141](https://github.com/kinopshq/core/issues/141)) ([47116b1](https://github.com/kinopshq/core/commit/47116b15343ddcfaafe131a1c4fe80839dfc094e))
+
 ## [0.5.1](https://github.com/kinopshq/core/compare/v0.5.0...v0.5.1) (2026-11-28)
 
 
