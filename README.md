@@ -27,13 +27,14 @@ Requirements: a Kubernetes cluster (2 vCPU, 8 GB RAM), `kubectl`, `helm`, `git`.
 ### Private repo
 
 If your fork is private (GitLab, Gitea, private GitHub...), the installer needs a token to clone and push it.
+The same token lets ArgoCD read your app repos of the same owner: give it read access to them too (GitHub: Contents: Read).
 
-1. Create a token with read and write access to the repo:
+1. Create the token:
 
    | Host | Token | Permissions |
    |---|---|---|
+   | GitHub | Fine-grained personal access token | Contents: Read and write |
    | GitLab | Personal or project access token | `read_repository`, `write_repository` |
-   | GitHub | Fine-grained personal access token | Contents: Read and write (on your fork) |
 
 2. Export it, then run the installer:
 
@@ -42,12 +43,6 @@ If your fork is private (GitLab, Gitea, private GitHub...), the installer needs 
    export GIT_TOKEN=<your-token>
    curl -fsSL https://raw.githubusercontent.com/kinopshq/core/main/scripts/install.sh | bash
    ```
-
-> [!NOTE]
-> Use `export`. With `GIT_TOKEN=... curl ... | bash`, only `curl` gets the token, not the installer.
-
-> [!TIP]
-> `repository not found` on a repo that exists usually means a missing or invalid token: private repos are hidden without one.
 
 ## Deploy your app
 
@@ -79,10 +74,11 @@ metadata:
     argocd.argoproj.io/sync-wave: "-1"
 spec:
   sourceRepos:
-    - https://github.com/me/api.git
-    - https://github.com/me/web.git
+    - "*"
   destinations:
     - {namespace: "*", server: https://kubernetes.default.svc}
+  clusterResourceWhitelist:
+    - {group: "", kind: Namespace}
 ```
 
 `appset.yaml` (one element = one app):
