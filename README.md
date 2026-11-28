@@ -68,6 +68,7 @@ If your fork is private (GitLab, Gitea, private GitHub...), the installer needs 
 | I want to | Do this, then `git push` |
 |---|---|
 | Change my settings | Edit `cluster.yaml` |
+| Update kinops | `./install.sh upgrade` (latest) or `./install.sh upgrade v0.6.0`: shows the changelog, merges into your fork, pushes |
 | Open ArgoCD, Grafana, Infisical | Add your IP to `global.platformAccess.allowedIPs` in `cluster.yaml` (closed by default, others get 403). Behind Cloudflare, a tunnel or at home: [Platform access](#platform-access) |
 | Turn a component on or off | Comment or uncomment it in `argocd/applications/platform/appset.yaml` |
 | See the deploy order | Stages and dependencies: [argocd/applications/platform/README.md](argocd/applications/platform/README.md) |

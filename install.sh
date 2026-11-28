@@ -4,6 +4,7 @@
 #   ./install.sh             configure if needed, then install (default)
 #   ./install.sh configure   ask the questions again, commit, push, install
 #   ./install.sh doctor      check the cluster and the repo
+#   ./install.sh upgrade [vX.Y.Z]   merge a kinops release (default: the latest) into your fork and push (asks first)
 #   ./install.sh uninstall   remove everything the platform created, volumes included (asks first; keeps CRDs)
 #   ./install.sh password argocd|infisical|grafana   print a login (once its app is deployed)
 # KSTACK_VERBOSE=1 shows every step in detail.
@@ -158,7 +159,7 @@ is_public_repo() {
   esac
 }
 
-usage() { sed -n '2,19p' "$0" | sed 's/^# \{0,1\}//'; }
+usage() { sed -n '2,20p' "$0" | sed 's/^# \{0,1\}//'; }
 
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -169,6 +170,14 @@ while [ $# -gt 0 ]; do
       CMD=password
       PW_APP=${2:-}
       [ $# -lt 2 ] || shift
+      ;;
+    upgrade)
+      CMD=upgrade
+      UPGRADE_TO=""
+      case "${2:-}" in
+        ""|-*) ;;
+        *) UPGRADE_TO=$2; shift ;;
+      esac
       ;;
     --pack)
       case "${2:-}" in
@@ -964,6 +973,104 @@ setup() {
   ok "pushed: $(git -C "$ROOT" log -1 --format='%h %s')"
 }
 
+# ---------------------------------------------------------------- upgrade
+# upgrade [VERSION]: merge a kinops release (default: the latest vX.Y.Z tag) into this clone of your fork, then
+# push: ArgoCD applies it. Shows the changelog first (breaking changes on top) and asks (KSTACK_YES=1: no question).
+# A conflict with your own changes stops it: merge aborted, nothing pushed. No migration, no rollback.
+UPSTREAM=${KSTACK_UPSTREAM:-https://github.com/kinopshq/core}
+# changelog_since VERSION: the CHANGELOG.md sections newer than VERSION (stdin), links shortened
+changelog_since() {
+  awk -v cur="## [$1]" 'index($0, cur) == 1 { exit } /^## / { p = 1 } p' \
+    | sed -E 's/^## \[([^]]*)\]\([^)]*\)/## \1/; s/ \(\[[0-9a-f]{7,}\]\([^)]*\)\)//; s/\[(#[0-9]+)\]\([^)]*\)/\1/g' \
+    | cat -s
+}
+upgrade() {
+  local target=${1:-} branch current sha notes breaking answer files f head rc=0
+  git -C "$ROOT" rev-parse --git-dir >/dev/null 2>&1 || die "run install.sh upgrade from a git clone of your fork"
+  if is_public_repo "$(git -C "$ROOT" remote get-url origin 2>/dev/null)"; then
+    die "this clone is our public repo (try.sh demo?): upgrade works on your fork. To update the demo, run try.sh again"
+  fi
+  branch=$(git -C "$ROOT" symbolic-ref -q --short HEAD) || die "not on a branch: git checkout <the branch ArgoCD follows>"
+  if [ -n "$(git -C "$ROOT" status --porcelain --untracked-files=no)" ]; then
+    die "uncommitted changes in $ROOT: commit (or stash) them first"
+  fi
+  if [ "$branch" != "$(rev)" ]; then
+    warn "ArgoCD follows $(rev), you are on $branch"
+  fi
+  if [ -z "$target" ]; then
+    busy Upgrade "looking for the latest release..."
+    target=$(git ls-remote --tags --refs "$UPSTREAM" 'v*' 2>/dev/null | sed 's#.*refs/tags/##' | sort -V | tail -1)
+    [ -n "$target" ] || die "no release found in $UPSTREAM"
+  fi
+  busy Upgrade "fetching $target..."
+  git -C "$ROOT" fetch -q --tags "$UPSTREAM" >/dev/null 2>&1 || true   # tags: the version of your fork, later
+  git -C "$ROOT" fetch -q "$UPSTREAM" "$target" >/dev/null 2>&1 || die "$target not found in $UPSTREAM"
+  sha=$(git -C "$ROOT" rev-parse 'FETCH_HEAD^{commit}')
+  current=$(version)
+  if git -C "$ROOT" merge-base --is-ancestor "$sha" HEAD; then
+    step Upgrade "already on $target, nothing to do"
+    return 0
+  fi
+  step Upgrade "${current:-unknown version} -> $target"
+
+  # 1. What changes: breaking changes first, then the changelog
+  notes=$(git -C "$ROOT" show "$sha:CHANGELOG.md" 2>/dev/null | changelog_since "${current#v}") || true
+  breaking=$(awk '/^##/ { b = /BREAKING/ } b && /^\* /' <<<"$notes")
+  if [ -n "$breaking" ]; then
+    rule "Breaking changes"
+    printf '%s%s%s\n' "$COLOR_ERROR" "$breaking" "$COLOR_RESET"
+  fi
+  rule Changelog
+  printf '%s\n' "${notes:-(no changelog entry)}"
+  answer=$(ask "${KSTACK_YES:+yes}" "Merge $target into $branch and push? yes/no" no)
+  case "$answer" in
+    y|Y|yes) ;;
+    *) die "nothing merged (KSTACK_YES=1: no question)" ;;
+  esac
+
+  # 2. Merge: on a conflict, stop and leave the clone as it was
+  if ! git -C "$ROOT" -c user.name="${GIT_AUTHOR_NAME:-kinops}" -c user.email="${GIT_AUTHOR_EMAIL:-kinops@localhost}" \
+      merge -q --no-edit -m "kinops: upgrade to $target" "$sha" >/dev/null 2>&1; then
+    files=$(git -C "$ROOT" diff --name-only --diff-filter=U)
+    git -C "$ROOT" merge --abort >/dev/null 2>&1 || true
+    [ -n "$files" ] || die "git merge failed: cd $ROOT && git merge $sha"
+    ko "$target conflicts with your changes in:"
+    while read -r f; do
+      printf '       %s\n' "$f"
+    done <<<"$files"
+    die "merge aborted, nothing pushed. Merge by hand: git fetch $UPSTREAM $target && git merge FETCH_HEAD, fix these files, git commit, git push"
+  fi
+  step Merge "$(git -C "$ROOT" log -1 --format='%h %s')"
+
+  # 3. Push: ArgoCD applies it
+  local auth=()
+  if [ -n "${GIT_TOKEN:-}" ]; then
+    auth=(-c "http.extraheader=Authorization: Basic $(printf '%s:%s' "${GIT_USERNAME:-git}" "$GIT_TOKEN" | b64)")
+  fi
+  git -C "$ROOT" ${auth[@]+"${auth[@]}"} push -q origin "HEAD:$branch" \
+    || die "push failed (fork ahead of this clone? git pull. Write access? GIT_USERNAME/GIT_TOKEN). Merged in $ROOT: git push"
+  step Push "origin $branch"
+  if ! kubectl -n argocd get application app-of-apps >/dev/null 2>&1; then
+    printf ' ArgoCD applies it at its next poll (kubectl -n argocd get applications)\n'
+    return 0
+  fi
+  # ArgoCD polls Git every few minutes: refresh now, wait until every app sees the new commit, then for all ready
+  head=$(git -C "$ROOT" rev-parse HEAD)
+  kubectl -n argocd annotate applications --all argocd.argoproj.io/refresh=normal --overwrite >/dev/null 2>&1 || true
+  busy ArgoCD "picking up ${head:0:7}..."
+  for _ in $(seq 1 90); do
+    kubectl -n argocd get applications -o jsonpath='{range .items[*]}{.status.sync.revision}{"\n"}{end}' 2>/dev/null \
+      | grep -qvx "$head" || break
+    sleep 2
+  done
+  step ArgoCD "on ${head:0:7}"
+  rule Deploy
+  trap 'clear_busy_line; printf "\n\n Stopped waiting: ArgoCD keeps deploying (kubectl -n argocd get applications)\n"; exit 0' INT
+  wait_apps "$(enabled_components)" 1 || rc=1
+  trap - INT
+  return $rc
+}
+
 # ---------------------------------------------------------------- uninstall
 # Removes everything the platform created, deterministically (does not depend on ArgoCD pruning:
 # ArgoCD manages itself and can take itself down first). Asks first: the data in the volumes is lost.
@@ -1094,5 +1201,6 @@ case "$CMD" in
   install) header; setup; QUIET=1; install ;;
   configure) header; setup force; QUIET=1; install ;;
   uninstall) uninstall ;;
+  upgrade) header; upgrade "$UPGRADE_TO" ;;
   password) password "$PW_APP" ;;
 esac
