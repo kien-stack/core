@@ -5,5 +5,5 @@ type: application
 version: 0.1.0
 dependencies:
   - name: app-template
-    repository: oci://ghcr.io/dedsxc
-    version: 2.0.0
+    repository: oci://ghcr.io/kinopshq/charts
+    version: 0.1.0

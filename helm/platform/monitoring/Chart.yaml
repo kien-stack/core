@@ -21,9 +21,9 @@ dependencies:
     repository: https://victoriametrics.github.io/helm-charts/
     condition: victoria-logs-collector.enabled
     version: 0.3.9
-  # Daily VictoriaMetrics backup (vmbackup CronJob). Schema: https://github.com/dedsxc/labs/tree/main/helm/fork/app-template
+  # Daily VictoriaMetrics backup (vmbackup CronJob). Schema: https://github.com/kinopshq/helm-charts/tree/main/charts/app-template
   - name: app-template
-    repository: oci://ghcr.io/dedsxc
+    repository: oci://ghcr.io/kinopshq/charts
     condition: vmbackup.enabled
-    version: 2.0.0
+    version: 0.1.0
     alias: vmbackup

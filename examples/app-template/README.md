@@ -1,7 +1,7 @@
 # app-template examples
 
 One folder per kind of workload, ready to copy. Each one is a tiny Helm chart that depends on
-[app-template](https://github.com/dedsxc/labs/tree/main/helm/fork/app-template), the generic chart
+[app-template](https://github.com/kinopshq/helm-charts/tree/main/charts/app-template), the generic chart
 used across kinops.
 
 | Folder | What it runs | Kubernetes object |
