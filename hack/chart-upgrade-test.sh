@@ -61,7 +61,17 @@ diagnose() {
     done
   echo "::endgroup::"
 }
-trap 'rc=$?; set +e; [ "$rc" = 0 ] || diagnose; cleanup; exit "$rc"' EXIT
+# On exit: diagnostics if the test failed, then always clean up; keep the exit code.
+on_exit() {
+  local rc=$?
+  set +e
+  if [ "$rc" != 0 ]; then
+    diagnose
+  fi
+  cleanup
+  exit "$rc"
+}
+trap on_exit EXIT
 
 summary() { echo "$*"; [ -z "${GITHUB_STEP_SUMMARY:-}" ] || echo "$*" >> "$GITHUB_STEP_SUMMARY"; }
 

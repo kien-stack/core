@@ -10,62 +10,105 @@ KSTACK_PWD=$PWD   # where the user runs this: install.sh prints the commands rel
 REPO=${KSTACK_SOURCE:-https://github.com/kinopshq/core}
 REF=${KSTACK_REF:-main}
 DIR=${KSTACK_DIR:-$HOME/kinops-try}
-# colors: only on a TTY, honour NO_COLOR and TERM=dumb (bash 3.2 safe)
-kc() { [ -t "$1" ] && [ -z "${NO_COLOR:-}" ] && [ "${TERM:-dumb}" != dumb ]; }
-# shellcheck disable=SC2034
-if kc 1; then C_H=$'\033[1;36m' C_G=$'\033[32m' C_Y=$'\033[33m' C_R=$'\033[31m' C_D=$'\033[2m' C_0=$'\033[0m'; else C_H='' C_G='' C_Y='' C_R='' C_D='' C_0=''; fi
-if kc 2; then E_R=$'\033[1;31m' E_0=$'\033[0m'; else E_R='' E_0=''; fi
-log() { printf '%s[kinops]%s %s\n' "${C_H}" "${C_0}" "$*"; }
-die() { printf '%serror:%s %s\n' "${E_R}" "${E_0}" "$*" >&2; exit 1; }
-ask() { # ask VAR "question" default
-  local v=${!1:-}; if [ -n "$v" ] || [ -n "${KSTACK_YES:-}" ] || [ ! -r /dev/tty ]; then printf -v "$1" %s "${v:-$3}"; return; fi
-  read -r -p "  $2 [${3:-none}]: " v </dev/tty || true; printf -v "$1" %s "${v:-$3}"
-}
 
-for b in kubectl helm git; do command -v "$b" >/dev/null || die "$b is required (https://helm.sh/docs/intro/install, https://kubernetes.io/docs/tasks/tools)"; done
+# Colors: only on a terminal, honour NO_COLOR and TERM=dumb (bash 3.2 safe).
+# COLOR_* are for stdout; COLOR_FATAL / COLOR_STDERR_RESET for stderr (errors).
+use_color() { [ -t "$1" ] && [ -z "${NO_COLOR:-}" ] && [ "${TERM:-dumb}" != dumb ]; }
+if use_color 1; then
+  COLOR_TITLE=$'\033[1;36m' COLOR_DIM=$'\033[2m' COLOR_RESET=$'\033[0m'
+else
+  COLOR_TITLE='' COLOR_DIM='' COLOR_RESET=''
+fi
+if use_color 2; then
+  COLOR_FATAL=$'\033[1;31m' COLOR_STDERR_RESET=$'\033[0m'
+else
+  COLOR_FATAL='' COLOR_STDERR_RESET=''
+fi
+log() { printf '%s[kinops]%s %s\n' "$COLOR_TITLE" "$COLOR_RESET" "$*"; }
+die() { printf '%serror:%s %s\n' "$COLOR_FATAL" "$COLOR_STDERR_RESET" "$*" >&2; exit 1; }
+
+# ---------------------------------------------------------------- prerequisites
+for tool in kubectl helm git; do
+  command -v "$tool" >/dev/null \
+    || die "$tool is required (https://helm.sh/docs/intro/install, https://kubernetes.io/docs/tasks/tools)"
+done
 if ! command -v yq >/dev/null; then
-  mkdir -p "$DIR/.bin"; export PATH="$DIR/.bin:$PATH"
+  mkdir -p "$DIR/.bin"
+  export PATH="$DIR/.bin:$PATH"
   if ! [ -x "$DIR/.bin/yq" ]; then
-    os=$(uname -s | tr A-Z a-z); arch=$(uname -m); case $arch in x86_64) arch=amd64 ;; aarch64|arm64) arch=arm64 ;; esac
-    log "fetching yq ($os/$arch)"; curl -fsSL "https://github.com/mikefarah/yq/releases/latest/download/yq_${os}_${arch}" -o "$DIR/.bin/yq"; chmod +x "$DIR/.bin/yq"
+    os=$(uname -s | tr '[:upper:]' '[:lower:]')
+    arch=$(uname -m)
+    case $arch in
+      x86_64) arch=amd64 ;;
+      aarch64|arm64) arch=arm64 ;;
+    esac
+    log "fetching yq ($os/$arch)"
+    curl -fsSL "https://github.com/mikefarah/yq/releases/latest/download/yq_${os}_${arch}" -o "$DIR/.bin/yq"
+    chmod +x "$DIR/.bin/yq"
   fi
 fi
 kubectl version --request-timeout=10s >/dev/null 2>&1 || die "no reachable cluster in the current kubectl context.
   No Kubernetes? k3s in one minute: curl -sfL https://get.k3s.io | INSTALL_K3S_EXEC=\"--disable traefik\" sh -"
 
-if [ -d "$DIR/src/.git" ]; then git -C "$DIR/src" fetch -q origin "$REF" && git -C "$DIR/src" checkout -qf FETCH_HEAD
-else mkdir -p "$DIR"; git -c advice.detachedHead=false clone -q --depth 1 -b "$REF" "$REPO" "$DIR/src"; fi
+# Our public repo at $REF, in $DIR/src (updated if already there)
+if [ -d "$DIR/src/.git" ]; then
+  git -C "$DIR/src" fetch -q origin "$REF" && git -C "$DIR/src" checkout -qf FETCH_HEAD
+else
+  mkdir -p "$DIR"
+  git -c advice.detachedHead=false clone -q --depth 1 -b "$REF" "$REPO" "$DIR/src"
+fi
 cd "$DIR/src"
+APPSET=argocd/applications/platform/appset.yaml
 
-if [ "${1:-}" = uninstall ]; then
-  # Deterministic, does not depend on ArgoCD pruning (ArgoCD manages itself and can take itself down first):
-  # orphan every Application, remove ArgoCD, then delete the demo namespaces and the cluster-wide
-  # objects of each release (webhooks left behind would break the API server for those kinds).
+# ---------------------------------------------------------------- uninstall
+# Deterministic, does not depend on ArgoCD pruning (ArgoCD manages itself and can take itself down first).
+# Leaves CRDs and StorageClasses.
+demo_uninstall() {
+  local releases=() namespaces=() first=() d r n o
   log "removing the platform (ArgoCD, the demo namespaces and their cluster-wide objects)"
-  rel=$(yq -r '.spec.generators[0].list.elements[].app' argocd/applications/platform/appset.yaml)
-  ns=$(yq -r '.spec.generators[0].list.elements[].namespace' argocd/applications/platform/appset.yaml | grep -vx kube-system | sort -u)
-  for d in helm/apps/*/; do [ -d "$d" ] && { ns="$ns $(basename "$d")"; rel="$rel $(basename "$d")"; }; done
+  # Helm releases and namespaces of the demo: the platform ApplicationSet list (minus kube-system) + helm/apps/*
+  while read -r r; do releases+=("$r"); done < <(yq -r '.spec.generators[0].list.elements[].app' "$APPSET")
+  while read -r n; do namespaces+=("$n"); done < <(yq -r '.spec.generators[0].list.elements[].namespace' "$APPSET" \
+    | grep -vx kube-system | sort -u)
+  for d in helm/apps/*/; do
+    if [ -d "$d" ]; then
+      namespaces+=("$(basename "$d")")
+      releases+=("$(basename "$d")")
+    fi
+  done
+
+  # 1. Stop ArgoCD: no controller left to re-create or prune anything, then orphan every
+  #    Application (finalizers cleared, workloads stay) and remove ArgoCD itself.
   kubectl -n argocd scale deploy argocd-applicationset-controller --replicas=0 >/dev/null 2>&1 || true
   kubectl -n argocd scale statefulset argocd-application-controller --replicas=0 >/dev/null 2>&1 || true
-  for a in $(kubectl -n argocd get applications,applicationsets,appprojects -o name 2>/dev/null); do
-    kubectl -n argocd patch "$a" --type merge -p '{"metadata":{"finalizers":null}}' >/dev/null 2>&1 || true
+  for o in $(kubectl -n argocd get applications,applicationsets,appprojects -o name 2>/dev/null); do
+    kubectl -n argocd patch "$o" --type merge -p '{"metadata":{"finalizers":null}}' >/dev/null 2>&1 || true
   done
   kubectl -n argocd delete applications,applicationsets,appprojects --all --wait=false >/dev/null 2>&1 || true
   helm uninstall argocd -n argocd --wait >/dev/null 2>&1 || true
-  for r in $rel; do
+
+  # 2. Cluster-wide objects of each release (webhooks left behind would break the API server for those kinds)
+  for r in "${releases[@]}"; do
     kubectl delete validatingwebhookconfigurations,mutatingwebhookconfigurations,apiservices,clusterrolebindings,clusterroles \
       -l app.kubernetes.io/instance="$r" --ignore-not-found >/dev/null 2>&1 || true
   done
-  # Workloads first, while the operators (CloudNativePG, External Secrets, cert-manager, OpenEBS) still run
-  # and can clear the finalizers of their own resources; then the operators.
-  ops="cert-manager cnpg-system external-secrets openebs"
-  first=$(for n in $ns; do case " $ops " in *" $n "*) ;; *) echo "$n" ;; esac; done)
-  log "deleting namespaces: $(echo $first)"
-  kubectl delete ns $first --ignore-not-found --wait=true --timeout=90s 2>/dev/null || true
-  log "deleting operators: $ops"
-  kubectl delete ns $ops --ignore-not-found --wait=true --timeout=90s 2>/dev/null || true
-  # Anything still stuck on a finalizer (operator already gone): clear it
-  for n in $ns; do
+
+  # 3. Namespaces: workloads first, while the operators (CloudNativePG, External Secrets, cert-manager, OpenEBS)
+  #    still run and can clear the finalizers of their own resources; then the operators.
+  local operators=(cert-manager cnpg-system external-secrets openebs)
+  for n in "${namespaces[@]}"; do
+    case " ${operators[*]} " in
+      *" $n "*) ;;
+      *) first+=("$n") ;;
+    esac
+  done
+  log "deleting namespaces: ${first[*]}"
+  kubectl delete ns "${first[@]}" --ignore-not-found --wait=true --timeout=90s 2>/dev/null || true
+  log "deleting operators: ${operators[*]}"
+  kubectl delete ns "${operators[@]}" --ignore-not-found --wait=true --timeout=90s 2>/dev/null || true
+
+  # 4. Anything still stuck on a finalizer (its operator is already gone): clear it, then delete again
+  for n in "${namespaces[@]}"; do
     kubectl get ns "$n" >/dev/null 2>&1 || continue
     for r in $(kubectl api-resources --namespaced --verbs=list -o name 2>/dev/null); do
       for o in $(kubectl -n "$n" get "$r" -o name 2>/dev/null); do
@@ -73,36 +116,64 @@ if [ "${1:-}" = uninstall ]; then
       done
     done
   done
-  kubectl delete ns $ns --ignore-not-found --wait=true --timeout=2m >/dev/null 2>&1 || log "some namespaces are still terminating: kubectl get ns"
-  log "done (CRDs and StorageClasses are kept)"; exit 0
+  kubectl delete ns "${namespaces[@]}" --ignore-not-found --wait=true --timeout=2m >/dev/null 2>&1 \
+    || log "some namespaces are still terminating: kubectl get ns"
+  log "done (CRDs and StorageClasses are kept)"
+}
+
+if [ "${1:-}" = uninstall ]; then
+  demo_uninstall
+  exit 0
 fi
 
+# ---------------------------------------------------------------- demo settings (local only, never pushed)
 ip=${KSTACK_IP:-$(kubectl get nodes -o jsonpath='{.items[0].status.addresses[?(@.type=="InternalIP")].address}')}
 dom=$ip.sslip.io
-[ -z "${KSTACK_VERBOSE:-}" ] || log "demo on context $(kubectl config current-context), https://*.$dom, release $REF"
+if [ -n "${KSTACK_VERBOSE:-}" ]; then
+  log "demo on context $(kubectl config current-context), https://*.$dom, release $REF"
+fi
 # A demo has no fork: ArgoCD reads OUR public repo at $REF (its cluster.yaml says example.com).
 # So, and ONLY in this demo, the root Application pins $REF and overrides global.domain.
 # A real install has none of this: ./install.sh writes your settings into your fork.
 D="$dom" yq -i '.global.domain = strenv(D)' cluster.yaml
 # k3s & co already run a metrics-server: do not deploy ours
 if [ -n "$(kubectl -n kube-system get deploy metrics-server -o jsonpath='{.spec.selector.matchLabels.k8s-app}' 2>/dev/null)" ]; then
-  yq -i 'del(.spec.generators[0].list.elements[] | select(.app == "metrics-server"))' argocd/applications/platform/appset.yaml
+  yq -i 'del(.spec.generators[0].list.elements[] | select(.app == "metrics-server"))' "$APPSET"
 fi
-D="$dom" V="$REF" EL="$(yq -o=json -I=0 '.spec.generators[0].list.elements' argocd/applications/platform/appset.yaml)" yq -i '.spec.source.targetRevision = strenv(V) |
-  .spec.source.kustomize.patches = [
-    {"target": {"kind": "ApplicationSet"}, "patch": ([
-      {"op": "replace", "path": "/spec/template/spec/source/targetRevision", "value": strenv(V)},
-      {"op": "add", "path": "/spec/template/spec/source/helm/valuesObject", "value": {"global": {"domain": strenv(D)}}}] | to_json)},
-    {"target": {"kind": "ApplicationSet", "name": "apps"}, "patch": ([
-      {"op": "replace", "path": "/spec/generators/0/git/revision", "value": strenv(V)}] | to_json)},
-    {"target": {"kind": "ApplicationSet", "name": "platform"}, "patch": ([
-      {"op": "replace", "path": "/spec/generators/0/list/elements", "value": (strenv(EL) | from_json)}] | to_json)}]' argocd/app-of-apps.yaml
+# Kustomize patches applied by the root Application to the ApplicationSets it creates (JSON patches):
+#   - every ApplicationSet: its apps follow $REF and get global.domain = <ip>.sslip.io
+#   - "apps": its Git generator reads $REF
+#   - "platform": the component list edited above (metrics-server maybe removed)
+components=$(yq -o=json -I=0 '.spec.generators[0].list.elements' "$APPSET")
+patches=$(cat <<YAML
+- target: {kind: ApplicationSet}
+  patch:
+    - {op: replace, path: /spec/template/spec/source/targetRevision, value: "$REF"}
+    - {op: add, path: /spec/template/spec/source/helm/valuesObject, value: {global: {domain: "$dom"}}}
+- target: {kind: ApplicationSet, name: apps}
+  patch:
+    - {op: replace, path: /spec/generators/0/git/revision, value: "$REF"}
+- target: {kind: ApplicationSet, name: platform}
+  patch:
+    - {op: replace, path: /spec/generators/0/list/elements, value: $components}
+YAML
+)
+# Kustomize wants each "patch" as a string: to_json turns each list of operations into one.
+REF="$REF" PATCHES="$patches" yq -i '
+  .spec.source.targetRevision = strenv(REF) |
+  .spec.source.kustomize.patches = (strenv(PATCHES) | from_yaml | (.. style="") | .[].patch |= to_json)
+' argocd/app-of-apps.yaml
 
+# ---------------------------------------------------------------- install, then next steps
 KSTACK_DEMO=1 KSTACK_PWD=$KSTACK_PWD bash install.sh install || exit $?
 raw=https://raw.githubusercontent.com/kinopshq/core/main/scripts
-b=$(printf '%*s' 39 ''); b=${b// /─}
-printf '\n %s─── Next steps %s%s\n' "${C_D}" "$b" "${C_0}"
+# section TITLE WIDTH: "─── TITLE ─────" (WIDTH dashes after the title)
+section() {
+  local dashes
+  dashes=$(printf '%*s' "$2" '')
+  printf '\n %s─── %s %s%s\n' "$COLOR_DIM" "$1" "${dashes// /─}" "$COLOR_RESET"
+}
+section "Next steps" 39
 printf ' %-16s %s\n' "1. Real install" "curl -fsSL $raw/install.sh | bash" "2. More packs" "https://kinops.dev"
-b=$(printf '%*s' 43 ''); b=${b// /─}
-printf '\n %s─── Remove %s%s\n' "${C_D}" "$b" "${C_0}"
+section Remove 43
 printf ' %s\n' "curl -fsSL $raw/try.sh | bash -s uninstall"
