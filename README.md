@@ -51,6 +51,10 @@ If your fork is private (GitLab, Gitea, private GitHub...), the installer needs 
 
 ## Deploy your app
 
+Two ways. Pick one.
+
+### 1. In this repo
+
 One folder in `helm/apps/` = one app. Nothing else to set up.
 
 ```bash
@@ -60,6 +64,69 @@ git add helm/apps/my-app && git commit -m "feat: add my-app" && git push
 ```
 
 More: [docs/BOOTSTRAP-APP.md](docs/BOOTSTRAP-APP.md)
+
+### 2. From your own repo
+
+Create a project and an ApplicationSet in `argocd/applications/apps/my-app/`.
+
+`app-project.yaml`:
+
+```yaml
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: my-app
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "-1"
+spec:
+  sourceRepos: [https://github.com/me/my-app.git]
+  destinations:
+    - {namespace: "*", server: https://kubernetes.default.svc}
+```
+
+`appset.yaml` (one app per folder in `charts/` of your repo):
+
+```yaml
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: my-app
+  namespace: argocd
+spec:
+  goTemplate: true
+  generators:
+    - git:
+        repoURL: https://github.com/me/my-app.git
+        revision: main
+        directories:
+          - path: "charts/*"
+  template:
+    metadata:
+      name: "{{ .path.basename }}"
+    spec:
+      project: my-app
+      source:
+        repoURL: https://github.com/me/my-app.git
+        targetRevision: main
+        path: "{{ .path.path }}"
+      destination:
+        server: https://kubernetes.default.svc
+        namespace: "{{ .path.basename }}"
+      syncPolicy:
+        automated: {prune: true, selfHeal: true}
+        syncOptions: [CreateNamespace=true]
+```
+
+Add both to `argocd/applications/apps/kustomization.yaml`, then `git push`:
+
+```yaml
+resources:
+  - app-project.yaml
+  - appset.yaml
+  - my-app/app-project.yaml
+  - my-app/appset.yaml
+```
 
 ## Platform access
 
