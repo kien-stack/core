@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.5.3](https://github.com/kinopshq/core/compare/v0.5.2...v0.5.3) (2026-11-28)
+
+
+### Bug fixes
+
+* **install:** every message that asks to edit a file shows its full path ([#148](https://github.com/kinopshq/core/issues/148)) ([4373efa](https://github.com/kinopshq/core/commit/4373efa0d8b71c84ba91be34760ce401bd39d0e9))
+* **install:** Gateway API CRDs warning shows the full path of cluster.yaml ([#146](https://github.com/kinopshq/core/issues/146)) ([3bbef0f](https://github.com/kinopshq/core/commit/3bbef0fde99733869c88d95f5d9b6b8a53831051))
+
 ## [0.5.2](https://github.com/kinopshq/core/compare/v0.5.1...v0.5.2) (2026-11-28)
 
 
