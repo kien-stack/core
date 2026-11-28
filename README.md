@@ -165,6 +165,15 @@ Still 403? The refused IP is the first field:
 kubectl -n traefik logs deploy/traefik | grep '" 403 '
 ```
 
+## Update
+
+```bash
+./install.sh upgrade          # latest release
+./install.sh upgrade v0.6.0   # or a given one
+```
+
+Shows the changelog, merges the release into your fork, pushes.
+
 ## Uninstall
 
 ```bash
