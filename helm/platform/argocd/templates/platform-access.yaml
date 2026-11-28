@@ -1,0 +1,25 @@
+{{- /* install.sh bootstraps ArgoCD before the Traefik CRDs exist: no route, no Middleware */}}
+{{- if (index .Values "argo-cd").server.httproute.enabled }}
+# Platform UI access: only global.platformAccess.allowedIPs (cluster.yaml) get in, everyone else gets 403.
+# Attached to this chart's HTTPRoute (ExtensionRef filter). Empty list: nobody from outside.
+# Behind a proxy that hides the client IP: traefik.ports.websecure.forwardedHeaders.trustedIPs (cluster.yaml),
+# the client IP is then read from X-Forwarded-For, skipping those proxies.
+{{- $allowed := dig "platformAccess" "allowedIPs" list (.Values.global | default dict) }}
+{{- $proxies := dig "ports" "websecure" "forwardedHeaders" "trustedIPs" list (.Values.traefik | default dict) }}
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: platform-access
+  annotations:
+    argocd.argoproj.io/sync-options: SkipDryRunOnMissingResource=true
+spec:
+  ipAllowList:
+    # 127.0.0.1/32 = Traefik itself: an empty list lets nobody in
+    sourceRange:
+      {{- toYaml ($allowed | default (list "127.0.0.1/32")) | nindent 6 }}
+    {{- with $proxies }}
+    ipStrategy:
+      excludedIPs:
+        {{- toYaml . | nindent 8 }}
+    {{- end }}
+{{- end }}

@@ -13,6 +13,11 @@ global:
     - argocd
     - infisical
     - grafana
+  # Platform UIs (ArgoCD, Grafana, Infisical): only these IPs/CIDRs get in, others get 403.
+  # Your own apps in helm/apps/ are not affected. ./install.sh puts your public IP here.
+  # Allow everyone (not recommended): [0.0.0.0/0]
+  platformAccess:
+    allowedIPs: []
   tls:
     # selfsigned | letsencrypt-http01 | letsencrypt-dns01 (then issuer: letsencrypt)
     issuer: selfsigned
@@ -39,6 +44,12 @@ traefik:
     spec:
       # LoadBalancer (cloud, k3s, minikube tunnel, Cilium L2) | NodePort
       type: LoadBalancer
+  # Behind a proxy or tunnel (Cloudflare tunnel, external LB, SNAT): the IPs of that proxy.
+  # Traefik then reads the client IP from X-Forwarded-For (global.platformAccess uses it).
+  # ports:
+  #   websecure:
+  #     forwardedHeaders:
+  #       trustedIPs: [10.42.0.0/16]
   # NodePort only: the IP your browser uses to reach the node
   # providers:
   #   kubernetesIngress:

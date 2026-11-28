@@ -57,6 +57,10 @@ kube-prometheus-stack:
             name: traefik
             namespace: traefik
             sectionName: https-grafana
+        # Only global.platformAccess.allowedIPs (cluster.yaml): templates/platform-access.yaml
+        filters:
+          - type: ExtensionRef
+            extensionRef: {group: traefik.io, kind: Middleware, name: platform-access}
     # Grafana.com dashboard 25747 "VictoriaLogs - Explorer for Kubernetes logs", downloaded at startup,
     # its DS_VICTORIALOGS input mapped to the "VictoriaLogs" datasource above.
     # One provider = one Grafana folder. Its name, the end of its path and the key under
