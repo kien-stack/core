@@ -207,15 +207,6 @@ run_timeout() {
 }
 b64() { base64 | tr -d '\n'; }
 
-# Public IP of this machine (what the Internet sees), empty if unknown. Default of global.platformAccess.allowedIPs.
-public_ip() {
-  local ip
-  ip=$(curl -fsS --max-time 5 https://api.ipify.org 2>/dev/null) || true
-  if [[ "$ip" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-    printf '%s' "$ip"
-  fi
-}
-
 # global.platformAccess.allowedIPs of cluster.yaml, comma-separated
 allowed_ips() { yq -r '.global.platformAccess.allowedIPs // [] | join(",")' "$CONFIG"; }
 
@@ -426,7 +417,7 @@ doctor() {
   local allowed
   allowed=$(allowed_ips)
   if [ -z "$allowed" ]; then
-    warn "global.platformAccess.allowedIPs is empty: the platform UIs answer 403 to everyone. Add your IP in cluster.yaml, then git push"
+    warn "platform UIs (ArgoCD, Grafana, Infisical) are closed: add your IP to global.platformAccess.allowedIPs in cluster.yaml, then git push"
   elif [[ ",$allowed," == *",0.0.0.0/0,"* ]]; then
     warn "platform UIs open to the whole Internet (global.platformAccess.allowedIPs: 0.0.0.0/0)"
   else
@@ -840,7 +831,21 @@ summary() {
   printf '%s\n' "$out" >"$ROOT/kstack-access.txt"
   printf '%s\n' "$out" | sed -E "s/^ ([A-Za-z]+)/ ${COLOR_BOLD}\1${COLOR_RESET}/"   # titles in bold
   printf '\n %sSaved to %s (no passwords)%s\n' "$COLOR_DIM" "$ROOT/kstack-access.txt" "$COLOR_RESET"
-  printf ' Platform UIs only answer: %s (global.platformAccess.allowedIPs)\n' "$(allowed_ips)"
+  rule "Platform access"
+  if [ -z "$(allowed_ips)" ]; then
+    printf ' %sArgoCD, Grafana and Infisical are closed%s (403 for everyone)\n\n' "$COLOR_WARN" "$COLOR_RESET"
+    printf ' Access now:\n'
+    printf '   %s%-10s %-23s %s%s\n' "$COLOR_BOLD" UI URL COMMAND "$COLOR_RESET"
+    printf '   %-10s %-23s %s\n' \
+      ArgoCD https://localhost:8080 "kubectl -n argocd port-forward svc/argocd-server 8080:443" \
+      Grafana http://localhost:8081 "kubectl -n monitoring port-forward svc/monitoring-grafana 8081:80" \
+      Infisical http://localhost:8082 "kubectl -n infisical port-forward svc/infisical-infisical-standalone-infisical 8082:8080"
+    printf '\n Open them to your IP in %scluster.yaml%s, then git push:\n' "$COLOR_BOLD" "$COLOR_RESET"
+    printf '   %sglobal:\n     platformAccess:\n       allowedIPs: [<your-ip>/32]%s\n\n' "$COLOR_DIM" "$COLOR_RESET"
+    printf ' Behind Cloudflare or a load balancer: README > Platform access\n\n'
+  else
+    printf ' ArgoCD, Grafana and Infisical only answer: %s\n\n' "$(allowed_ips)"
+  fi
   if [ -z "${KSTACK_DEMO:-}" ]; then
     echo " To change anything: edit cluster.yaml or helm/, then git push"
   fi
@@ -896,16 +901,8 @@ setup() {
   fi
   KSTACK_IP=$(ask "${KSTACK_IP:-}" "IP your browser uses to reach the cluster (Traefik node / LB)" "$ip")
   KSTACK_CILIUM=$(ask "${KSTACK_CILIUM:-}" "Install Cilium (only for a cluster created WITHOUT a CNI) true/false" false)
-  # Platform UIs: the current list, else this machine's public IP
-  local allowed
-  allowed=$(allowed_ips)
-  if [ -z "$allowed" ]; then
-    allowed=$(public_ip)
-    if [ -n "$allowed" ]; then
-      allowed="$allowed/32"
-    fi
-  fi
-  KSTACK_ALLOWED_IPS=$(ask "${KSTACK_ALLOWED_IPS:-}" "Public IPs/CIDRs of your browser allowed on ArgoCD, Grafana, Infisical (comma-separated)" "$allowed")
+  # Platform UIs: closed by default (allowedIPs: []), or KSTACK_ALLOWED_IPS, or the current list
+  KSTACK_ALLOWED_IPS=${KSTACK_ALLOWED_IPS:-$(allowed_ips)}
   local dom=${KSTACK_DOMAIN:-${KSTACK_IP}.sslip.io} tls=selfsigned issuer=selfsigned-ca
   if [ -n "$KSTACK_EMAIL" ]; then
     tls=letsencrypt-http01
@@ -917,9 +914,6 @@ setup() {
     .global.domain = strenv(D) | .global.tls.issuer = strenv(T) | .global.issuer = strenv(I) |
     .global.tls.email = strenv(E)' "$CONFIG"
   A="$KSTACK_ALLOWED_IPS" yq -i '.global.platformAccess.allowedIPs = (strenv(A) | split(",") | map(sub(" "; "")) | map(select(. != "")))' "$CONFIG"
-  if [ -z "$KSTACK_ALLOWED_IPS" ]; then
-    warn "no allowed IP: the platform UIs answer 403 to everyone. Set global.platformAccess.allowedIPs in cluster.yaml"
-  fi
   # 2. argocd/: ArgoCD follows your fork
   R="$origin" B="$branch" yq -i '.spec.source.repoURL = strenv(R) | .spec.source.targetRevision = strenv(B)' "$APP"
   local f
