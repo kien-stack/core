@@ -74,8 +74,7 @@ metadata:
     argocd.argoproj.io/sync-wave: "-1"
 spec:
   sourceRepos:
-    - https://github.com/me/api.git
-    - https://github.com/me/web.git
+    - "*"
   destinations:
     - {namespace: "*", server: https://kubernetes.default.svc}
   clusterResourceWhitelist:
